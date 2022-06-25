@@ -48,7 +48,7 @@ So, what problems does this pattern solve?
 
 - Update order is always predictable due to the dependencies between the systems that contain all the logic.
 - It is much easier to make the logic parallel, because systems access well-known sets of components, so we can
-  just execute them simultaneously if they do not both modify a one component type.
+  just execute them simultaneously if they do not both modify the same component type.
 - It is much easier to serialize data and send it over the network, because the logic is separated from the data.
 
 Now you know what ECS theoretically is, so we can discuss the topic of entities deeper.
@@ -67,7 +67,7 @@ into that topic in this post as I'm not an expert in that.
 
 But let's dig deeper into the "entity as number" idea. Doesn't it remind you of some other topics from computer
 science? Like foreign indices from relational databases? The thing is that we can view component types as tables
-and entities as foreign keys that create relations between components. I like draw parallels between different
+and entities as foreign keys that create relations between components. I like to draw parallels between different
 computer science topics, and therefore I really like this connection: it looks like a powerful path to improve
 ECS pattern even further by adding an ability to create other indices instead of only querying by the entity id.
 It is not a fresh idea, but I've never seen any successful implementations of that principle, therefore I have decided
@@ -106,7 +106,7 @@ kind of universal storage. We can store a lot of things there:
 - Maybe even assets!
 
 It might sound messy, but it also sounds really powerful, isn't it? At least it is for me, therefore I decided to
-make it a core idea for my ECS implementation. Sticking to this idea makes a principle of entities obsolete:
+make it the core idea for my ECS implementation. Sticking to this idea makes the principle of entities obsolete:
 we just have tables with records and systems (personally, I prefer to call them tasks) that operate on these records.
 
 Of course, this approach has its pros and cons. Let's start from pros:
