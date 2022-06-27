@@ -89,7 +89,7 @@ for example:
 - Multiplayer games usually have low replication frequency to optimize traffic usage. For example, Apex Legends
   sends replication data at 20 samples per second. Of course, it would have looked laggy without interpolation!
 
-### How to implement interpolation?
+### Interpolation in Celerity
 
 Now it's finally time to tell how I implemented interpolation in 
 [Celerity](https://github.com/KonstantinTomashevich/Emergence/tree/72ff166/Library/Public/Celerity)!
