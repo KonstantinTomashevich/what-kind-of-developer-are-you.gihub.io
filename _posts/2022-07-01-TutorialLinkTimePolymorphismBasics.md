@@ -1,12 +1,13 @@
 ---
 layout: post
 title: 'Tutorial: Link-time polymorphism basics'
+date: 2022-07-01 15:15:00 GMT+3
 categories: [Tutorials, Architecture]
 tags: [Tutorials, C++, CMake]
 ---
 
 Everyone knows what runtime and compile time polymorphisms are, but what about link-time polymorphism? There is much
-less materials about this type of polymorphism and it seems almost forgotten. So I decided to write tutorial about 
+less materials about this type of polymorphism and it seems almost forgotten. So I've decided to write tutorial about 
 its basics.
 
 ### What link-time polimorphism is?
