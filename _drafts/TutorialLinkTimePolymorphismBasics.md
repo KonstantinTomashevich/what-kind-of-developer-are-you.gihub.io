@@ -1,6 +1,6 @@
 ---
 layout: post
-title: 'Tutorial: Basics of link-time polymorphism'
+title: 'Tutorial: Link-time polymorphism basics'
 categories: [Tutorials, Architecture]
 tags: [Tutorials, C++, CMake]
 ---
@@ -261,8 +261,138 @@ scalable and more "poetic" approaches to link-time polymorphism.
 
 ### Make implementations separate libraries
 
-...
+While direct file selection is simple it is also not really scalable: it would be difficult to manage APIs with lots
+of files like that. But there is more scalable approach: creating and linking diffirent CMake libraries. Let's modify
+our example to use this approach.
+
+To do this we need to split our CMake script into several ones. Let's start from CMakeLists.txt for `Serialization` 
+library:
+
+```cmake
+# Let's start from header-only API target. It only contains include path and our API header.
+add_library (SerializationAPI INTERFACE "Serializer.hpp")
+target_include_directories (SerializationAPI INTERFACE "..")
+
+# Declare common library target that will be used by both our implementations.
+add_library (SerializationCommon STATIC "Common/SerializerPrivate.cpp" "Common/SerializerPrivate.hpp")
+target_link_libraries (SerializationCommon PUBLIC SerializationAPI)
+
+# Declare Development implementation library.
+add_library (SerializationDevelopment STATIC "Development/Serializer.cpp")
+target_link_libraries (SerializationDevelopment PUBLIC SerializationCommon)
+
+# Declare Production implementation library.
+add_library (SerializationProduction STATIC "Production/Serializer.cpp")
+target_link_libraries (SerializationProduction PUBLIC SerializationCommon)
+```
+{: file='Library/Serialization/CMakeLists.txt'}
+
+Let's also move our test executable setup into separate script:
+
+```cmake
+add_executable (App "Main.cpp")
+
+# Link required implementation library depending on build option.
+if (DEVELOPMENT)
+    target_link_libraries (App PRIVATE SerializationDevelopment)
+else ()
+    target_link_libraries (App PRIVATE SerializationProduction)
+endif ()
+```
+{: file='App/CMakeLists.txt'}
+
+After that our root script will become quite small:
+
+```cmake
+cmake_minimum_required (VERSION 3.21)
+project (LinkTimePolymorphismBasicsProject)
+
+set (CMAKE_CXX_STANDARD 20)
+
+# Build system option that is used for implementation selection.
+option (DEVELOPMENT "Whether to use development serialization library." OFF)
+
+# Just add our subscripts for application and library.
+add_subdirectory (App)
+add_subdirectory (Library/Serialization)
+```
+{: file='CMakeLists.txt'}
+
+This approach is not only more advanced and scalable, it is also much more CMake-friendly: changing source file list
+triggers full target recompilation, but changing link dependency only triggers relinking! It means that changing
+link-time polymorphism implementation will be quite fast, because compiler won't need to recompile any of the
+source files.
 
 ### Use implementations as switchable dynamic libraries
 
-...
+One of the coolest moments about link-time polymorphism is that we can swap implementations between program executions
+if we're using dynamic linking. Let's try it! To migrate to dynamic linking we firsly need to add export/import
+information to our API (it is required only on Windows, but nevertheleess it's better to know how to do it):
+
+```c++
+// Includes ...
+
+// Declare whether we're exporting or importing dynamic symbols. Needed only for Windows builds.
+#ifdef SERIALIZATION_IMPLEMENTATION
+#    define SERIALIZATION_API __declspec(dllexport)
+#else
+#    define SERIALIZATION_API __declspec(dllimport)
+#endif
+
+// ...
+class SERIALIZATION_API Serializer final
+// ...
+```
+{: file='Library/Serialization/Serializer.hpp'}
+
+Now we need to update our libraries build script by making several changes:
+- Add `SERIALIZATION_IMPLEMENTATION` compile define to targets that implement any methods.
+- Make our libraries `SHARED` for dynamic linking.
+- Make sure that both implementation libraries are named `Serialization` so we can swap files.
+
+After these changes library script will look like this:
+
+```cmake
+# Let's start from header-only API target. It only contains include path and our API header.
+add_library (SerializationAPI INTERFACE "Serializer.hpp")
+target_include_directories (SerializationAPI INTERFACE "..")
+
+# Declare common library target that will be used by both our implementations.
+# NOTE: In order for implementation detection to work properly we need to make this library shared too.
+#       Implementation detection will flag `no destructor` link error if we link it as static like before.
+add_library (SerializationCommon SHARED "Common/SerializerPrivate.cpp" "Common/SerializerPrivate.hpp")
+target_link_libraries (SerializationCommon PUBLIC SerializationAPI)
+target_compile_definitions (SerializationCommon PRIVATE SERIALIZATION_IMPLEMENTATION)
+
+# Declare Development implementation library.
+add_library (SerializationDevelopment SHARED "Development/Serializer.cpp")
+target_link_libraries (SerializationDevelopment PUBLIC SerializationCommon)
+target_compile_definitions (SerializationDevelopment PRIVATE SERIALIZATION_IMPLEMENTATION)
+set_target_properties (SerializationDevelopment PROPERTIES OUTPUT_NAME "Development/Serialization")
+
+# Declare Production implementation library.
+add_library (SerializationProduction SHARED "Production/Serializer.cpp")
+target_link_libraries (SerializationProduction PUBLIC SerializationCommon)
+target_compile_definitions (SerializationProduction PRIVATE SERIALIZATION_IMPLEMENTATION)
+set_target_properties (SerializationProduction PROPERTIES OUTPUT_NAME "Production/Serialization")
+```
+{: file='Library/Serialization/CMakeLists.txt'}
+
+As the last step we need to teach our example app target to copy libraries to its folder:
+
+```cmake
+# Target definition...
+
+# We need to copy runtime libraries to our executable folder.
+add_custom_command (
+        TARGET App POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:App> $<TARGET_FILE_DIR:App>
+        COMMAND_EXPAND_LISTS)
+```
+{: file='App/CMakeLists.txt'}
+
+And that's all that we need to do in order to make implementations swappable as files! Now you can try to replace
+DLL (or SO) files and see that it really works! You can download the full source code from 
+[GitHub repository](https://github.com/WhatKindOfDevAreYou/LinkTimePolymorphismBasicsProject).
+
+Hope you've enjoyed reading! :)
