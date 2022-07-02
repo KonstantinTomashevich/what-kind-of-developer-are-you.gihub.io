@@ -6,13 +6,13 @@ tags: [Tutorials, C++, CMake]
 ---
 
 Everyone knows what runtime and compile time polymorphisms are, but what about link-time polymorphism? There is much
-less materials about this type of polymorphism and it seems almost forgotten. So I decided to write short tutorial 
-about it!
+less materials about this type of polymorphism and it seems almost forgotten. So I decided to write tutorial about 
+its basics.
 
 ### What link-time polimorphism is?
 
 Runtime polymorphism operates on top of virtual methods, lambdas and function pointers. Compile time polymorphism
-utilizes special template-based technique like SFINAE and CRTP to get things done. But what could we do during link
+utilizes special template-based techniques like SFINAE and CRTP to get things done. But what could we do during link
 time? While assembling compiled object files into monolithic libraries and executables linker also resolves so-called
 external references: declarations that are visible to compiled object but are defined outside of its scope. And that's
 exactly where the secret of link-time polymorphism is hidden: we're selecting where linker searches for these 
@@ -23,8 +23,8 @@ different implementation library would be linked to your program. Let's discuss 
 Pros:
 - There is no runtime cost of link-time polymorphism: call cost is equal to regular function call and even inlining
   is possible through link-time optimizations.
-- There is no additional compile time cost: we're not creating hordes of templates like in compile-time polymorphism,
-  therefore compilation time is not higher that compilation time of regular code without polymorphism.
+- There is no additional compile time cost: we're not creating hordes of templates like in compile time polymorphism,
+  therefore compilation time is not higher that for regular code without polymorphism.
 - It's the only method that can be used to hide platform-specific code.
 
 Cons:
@@ -33,19 +33,19 @@ Cons:
 - You need buildsystem support: decision what libraries to link is done through build system, therefore you need
   to be ready to modify it.
 
-As you can see, link-time polymorphism is not the silver bullet and it has its own restrictions. But, im my opinion,
+As you can see, link-time polymorphism is not a silver bullet and it has its own restrictions. But, in my opinion,
 it deserves to be used much more that it is used nowadays: in a lot of cases we don't really need to change 
 implementation while program is running, but runtime polymorphism is still used and so we're paying excessive
 performance price for it.
 
 ### Example problem
 
-Let's imagine that our replication needs to serialize data in textual format in development mode for easier debugging
+Let's imagine that our application needs to serialize data in textual format in development mode for easier debugging
 and in binary format in production mode for smaller file size. The most classic solution for such cases is runtime
-polymorphism: using pure virtual interface and two implementations for production and development. It is working
+polymorphism: using pure virtual class with two implementations: for production and for development. It is working
 solution, but is looks kind of clumpsy for me:
 
-- We don't need to ever switch implementations during runtime, but we're paying runtime polymorphism costs.
+- We don't ever need to switch implementations during runtime, but we're paying runtime polymorphism costs.
 - Unneded development logic will be compiled into production executable and vice versa. It's not critical, of course,
   but not elegant either.
 
@@ -54,15 +54,15 @@ I've decided to write simple step-by-step tutorial how to do that with link-time
 
 ### Initial solution
 
-Lets start from the simplest way of implementing link-time polymorphism: object file selection. It means that we decide
+Let's start from the simplest way of implementing link-time polymorphism: object file selection. It means that we decide
 on buildsystem level which files belong to the target and by that we are selecting correct implementation for our 
 target.
 
 #### Interface
 
-The best way to start it to draft our serialization interface. For the purpose of simplicity we would just serialize
-strings and ints and append comments to development mode files. Of course, it not even near the real serializer case,
-but it's better to have simple unrealistic example that difficult to understand but real one.
+The best way to start is to draft our serialization interface. For the purpose of simplicity we will just serialize
+strings and ints and append comments to development mode files. Of course, it is not even near the real serializers,
+but it's better to have simple unrealistic example than difficult to understand but real one.
 
 ```c++
 #pragma once
@@ -73,9 +73,9 @@ but it's better to have simple unrealistic example that difficult to understand 
 // https://en.cppreference.com/w/cpp/language/pimpl
 // It also allows to easily switch DLLs.
 //
-// The other approach is to use inplace fixed size array, which is better for this case,
-// but makes  tutorial much less readable. Therefore, I've decided to sacrifice
-// performance, which means nothing here, for readability. :)
+// The other approach is to use inplace fixed size array, which is better for
+// this case, but makes  tutorial much less readable. So I've decided to sacrifice
+// performance for readability, because performance means nothing here.
 struct SerializerImplementation;
 
 class Serializer final
@@ -107,7 +107,7 @@ private:
 
 Both our implementations will write data to a file through `std::ofstream`. So they will have same 
 `SerializerImplementation`, move constructor and destructor. We don't want to duplicate this code, therefore
-it makes sense to make this code common for both implementations.
+it makes sense that this code should be common for both implementations.
 
 ```c++
 #pragma once
@@ -183,7 +183,7 @@ Serializer::Serializer (const char *_outputFileName) noexcept
 
 void Serializer::WriteInt32 (int32_t _number) noexcept
 {
-    // It is incorrect to save ints like this because it ignores endianness. But it is ok enough for our sample.
+    // It is incorrect to save ints like this because we ignore endianness. But it is ok enough for our sample.
     implementation->output.write (reinterpret_cast<const char *> (&_number), sizeof (_number));
 }
 
@@ -202,7 +202,7 @@ void Serializer::WriteAsciiComment (const char *_string) noexcept
 
 #### User application
 
-For this sample we will keep user application as small as possible, because we have no need of complex logic here:
+For this sample we will keep user application as small as possible, because we have no need for complex logic here:
 
 ```c++
 #include <Serialization/Serializer.hpp>
@@ -252,16 +252,14 @@ target_include_directories (App PRIVATE "Library/")
 ```
 {: file='CMakeLists.txt'}
 
-#### Conclusion
-
 Despite being the most simple and straighforward way to use link-time polymorphism, direct file selection is the most
-widely used too: it is the usual go-to solution for platform-independence layers implementations and other
+widely used approach: it is the usual go-to solution for platform-independence layers implementations and other
 layers, like graphics API independence layer. But it is not "poetic" enough, isn't it? Below we will discover more
-scalable and more "poetic" approaches to link-time polymorphism.
+scalable and more "poetic" approaches of link-time polymorphism.
 
-### Make implementations separate libraries
+### Implementations as separate libraries
 
-While direct file selection is simple it is also not really scalable: it would be difficult to manage APIs with lots
+While direct file selection is simple, it is also not really scalable: it would be difficult to manage APIs with lots
 of files like that. But there is more scalable approach: creating and linking diffirent CMake libraries. Let's modify
 our example to use this approach.
 
@@ -312,21 +310,21 @@ set (CMAKE_CXX_STANDARD 20)
 # Build system option that is used for implementation selection.
 option (DEVELOPMENT "Whether to use development serialization library." OFF)
 
-# Just add our subscripts for application and library.
+# Just add our scripts for application and library.
 add_subdirectory (App)
 add_subdirectory (Library/Serialization)
 ```
 {: file='CMakeLists.txt'}
 
-This approach is not only more advanced and scalable, it is also much more CMake-friendly: changing source file list
-triggers full target recompilation, but changing link dependency only triggers relinking! It means that changing
+This approach is not only more advanced and scalable: it is also much more CMake-friendly, because changing source file 
+list triggers full target recompilation, but changing link dependency only triggers relinking! It means that changing
 link-time polymorphism implementation will be quite fast, because compiler won't need to recompile any of the
 source files.
 
-### Use implementations as switchable dynamic libraries
+### Switching implementations without rebuilding the application
 
 One of the coolest moments about link-time polymorphism is that we can swap implementations between program executions
-if we're using dynamic linking. Let's try it! To migrate to dynamic linking we firsly need to add export/import
+if we're using dynamic linking. Let's try it out! To migrate to dynamic linking we firsly need to add export/import
 information to our API (it is required only on Windows, but nevertheleess it's better to know how to do it):
 
 ```c++
@@ -346,9 +344,9 @@ class SERIALIZATION_API Serializer final
 {: file='Library/Serialization/Serializer.hpp'}
 
 Now we need to update our libraries build script by making several changes:
-- Add `SERIALIZATION_IMPLEMENTATION` compile define to targets that implement any methods.
-- Make our libraries `SHARED` for dynamic linking.
-- Make sure that both implementation libraries are named `Serialization` so we can swap files.
+- Adding `SERIALIZATION_IMPLEMENTATION` compile define to targets that implement any methods.
+- Making our libraries `SHARED` for dynamic linking.
+- Making sure that both implementation libraries outputs are named `Serialization` so we can swap files.
 
 After these changes library script will look like this:
 
@@ -358,8 +356,9 @@ add_library (SerializationAPI INTERFACE "Serializer.hpp")
 target_include_directories (SerializationAPI INTERFACE "..")
 
 # Declare common library target that will be used by both our implementations.
-# NOTE: In order for implementation detection to work properly we need to make this library shared too.
-#       Implementation detection will flag `no destructor` link error if we link it as static like before.
+# NOTE: In order for implementation detection to work properly we need to make 
+#       this library shared too. Implementation detection will flag `no destructor`
+#       link error if we link it as static library like before.
 add_library (SerializationCommon SHARED "Common/SerializerPrivate.cpp" "Common/SerializerPrivate.hpp")
 target_link_libraries (SerializationCommon PUBLIC SerializationAPI)
 target_compile_definitions (SerializationCommon PRIVATE SERIALIZATION_IMPLEMENTATION)
