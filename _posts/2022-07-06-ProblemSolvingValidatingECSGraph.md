@@ -1,6 +1,7 @@
 ---
 layout: post
 title: 'Problem solving: Validating ECS graph'
+date: 2022-07-06 15:15:00 GMT+3
 categories: [Tutorials, Algorithms]
 tags: [Tutorials, C++, Algorithms, ECS]
 math: true
@@ -19,17 +20,16 @@ Let's start from defining properties of ECS system:
 - List of systems that are dependencies of this system.
 
 ECS graph is a set of systems where all references are internal. That means that if system A depends on system B and
-system A is a part of the graph that system B should be part of the graph too. It is called graph because it is usually
-visualized as directed graph of systems where dependencies are edges: if system A depends on system B that there
+system A is a part of the graph than system B should be part of the graph too. It is called graph because it is usually
+visualized as directed graph of systems where dependencies are edges: if system A depends on system B than there
 is an edge from B system node to A system node. To make sure that graph is valid and can be executed we need to 
 check that:
 
-- There is no deadlocks caused by dependencies.
-- There is no race conditions: when one system modifies resource other systems should not be able to access it.
+- There are no deadlocks caused by dependencies.
+- There are no race conditions: when one system modifies resource other systems should not be able to access it.
 - All the references in system lists (resources and dependencies) are valid.
 
-> Checking that all references in system properties are valid is trivial, therefore we will ignore this validation step.
-{: .prompt-info }
+Checking that all references in system properties are valid is trivial, so we will ignore this validation step here.
 
 ### Applying theory
 
@@ -42,23 +42,23 @@ $$ \forall A, B \in V \hspace{1em} \exists! (A, B) \in E \Leftrightarrow A \in d
 Now lets translate deadlock check into more math-friendly variant. If deadlock happens in ECS graph context it means 
 that system is waiting for dependency that cannot be finished. In this context it can happen only if system depends
 on itself, because every system must be finishable by definition. Such dependency may arise only if $$ G $$ has
-any cycle, therefore to pass this verification check $$ G $$ must be **acyclic** graph.
+any cycle, so to pass this verification check $$ G $$ must be an **acyclic** graph.
 
 Race condition happens when one system reads or modifies resource, for example component storage, while other system
 also modifies this resource. System dependencies must be specified in a way that prevents such race conditions from
-happening. So, how do we check that no system accesses resource $$ R $$ while system $$ A $$ is modifying this resource?
-Concurrent access to one resource $$ R $$ can be prevented by dependencies in two ways:
+happening. So, how do we check that there is no system accesses resource $$ R $$ while system $$ A $$ is modifying 
+this resource? Concurrent access to one resource $$ R $$ can be prevented by dependencies in two ways:
 
 $$ \forall A, B \in V \hspace{1em} \exists path (A \to B) \rightarrow \nexists RaceCondition $$
 
 $$ \forall A, B \in V \hspace{1em} \exists path (B \to A) \rightarrow \nexists RaceCondition $$
 
-Furthermore, on top of that we can build race condition criteria:
+On top of that we can build race condition criteria:
 
 $$ \forall A, B, R \hspace{1em} modifies (A, R) \land accesses (B, R) \land \nexists path (A \to B) 
 \land \nexists path (B \to A) \Leftrightarrow \exists RaceCondition $$
 
-I'll not bother readers with formal proof, because it's kind of boring. The main idea here is that absence of 
+I won't bother readers with formal proof because it's kind of boring. The main idea here is that absence of 
 dependencies between any task that modifies $$ R $$ and any task that accesses $$ R $$ leads to a race condition.
 You can draw several graphs yourself to get a grip of this idea.
 
@@ -68,7 +68,7 @@ We've found out what we need to do mathematically, now it is time to implement i
 
 Let's start from cycle detection: I've decided to use 
 [depth-first search](https://en.wikipedia.org/wiki/Depth-first_search) based graph traversal. Each node will be marked
-with one of 3 markers: `Unvisited`, `InStack` or `Verified`, and all nodes will be marked as `Unvisited` at the start.
+with one of 3 markers: `Unvisited`, `InStack` or `Verified`, and all nodes will be marked as `Unvisited` from the start.
 It's better to explain how this works through pseudocode:
 
 ```
@@ -84,7 +84,7 @@ function VisitSystem (system)
 
     // We've reached the node which children we're currently 
     // iterating. It means that node can be reached from itself
-    // and therefore is part of the cycle.
+    // and therefore is a part of the cycle.
     if (marks[system] == InStack)
     {
         return CycleFound;
@@ -130,8 +130,8 @@ function SearchForCycles ()
 
 That's all for our cycle detection, but what about race conditions? At first glance their detection looks much less
 straighforward. Of course, we could just bruteforce this and search path from every system, but it would be too
-inefficient. Thankfully, we could modify our visitation from cycle detection to collect all the reachable nodes
-for every node!
+inefficient. Thankfully, we could modify our visitation algorithm from cycle detection check to collect all the 
+reachable nodes for every node!
 
 ```
 function VisitSystem (system)
@@ -174,9 +174,9 @@ nodes and check whether these nodes access or modify the same resource.
 ### Optimizations
 
 Pseudocode above omits some implementation details that can be crucial for algorithm performance. It is logical,
-because it is pseudocode after all. I've decided to list these details below:
+because it is pseudocode after all. Therefore, I've decided to list these details below:
 
-- Use numeric indices for systems and resources: it allows to make `marks` and `reachable` structures arrays instead
+- Use numeric indices for systems and resources: it allows to make `marks` and `reachable` arrays instead
   of maps, which will significantly speed up operations on them.
 - Use bitsets for reachability recording: using bitsets instead of arrays to record reachable nodes would improve
   both performance and memory usage.
@@ -192,7 +192,7 @@ Above I've described the algorithm that I've used to verify ECS graph in
 [Emergence project](https://github.com/KonstantinTomashevich/Emergence). Of course, this implementation is a bit more
 complex and specific, because 
 [Flow](https://github.com/KonstantinTomashevich/Emergence/tree/daf48ca/Library/Public/Flow) task registration routine
-is a bit more complex than system registration in our example problem, but it still remains technically the same
+is more advanced than system registration in our example problem, but it still remains technically the same
 algorithm.
 
 Hope you've enjoyed reading! :)
