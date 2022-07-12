@@ -201,8 +201,10 @@ several reasons:
 - Reference counting makes copy constructor, move constructor and assignments non-trivial: we can not just copy
   pointer like we're doing without it. Performance impact is small, but working with non-trivial types is more difficult
   from the architectural point of view.
-- We cannot use stack-like allocators because we're deallocating strings and we cannot use fixed-size pool allocators
-  because strings have different sizes. This makes battle versus memory defragmentation much more complex.
+- If strings are ever deallocated, it's not possible to use addresses as stable hashes anymore! If some generic
+  structure stores hashes without values, interned string might become unused and will be deallocated, leaving
+  its address and therefore its hash value free to grab for new interned strings, which would invalidate 
+  affected hash structure.
   
 Due to this reasons [Emergence](https://github.com/KonstantinTomashevich/Emergence) implementation of this concept
 never deallocates unused interned strings. [Press Fire Games internal engine](https://www.pressfire.com/technologies)
@@ -212,6 +214,27 @@ So it is up to you to decide whether you need to do something about unused inter
 ### Fighting defragmentation
 
 Strings are small objects with vide variety of different sizes. When we're allocating strings through global heap
-allocator (`new` or `malloc`) at random moments, we're creating perfect ground for memory defragmentation.
+allocator, for example `new` or `malloc`, at random moments, we're creating perfect ground for memory defragmentation.
+Of course, it's possible to solve this problem too!
 
-...
+The core idea is to preallocate big memory blocks where interned strings will be stored and then use custom
+allocator to allocate strings inside these blocks. If there is not enough memory for interning new string,
+additional memory block will be allocated. If we're not deallocating unused interned strings, stack allocator is
+both the simpliest and the most efficient custom allocator for this purpose: each block has its own stack allocator
+that pushes new strings into itself. In this case we can call the whole structure for managing memory for intented
+strings **a pool of stacks**: we're using pool-based allocator to allocate new stack allocators that will allocate
+space for interned strings. It might sound monstrous, but it is actually quite easy to implement and use.
+
+But what changes when we're deallocating unused interned strings? Not a lot, actually! Sure, we cannot use stack
+allocators anymore, but we can use heap allocators instead. Therefore, the whole structure would become 
+**a pool of heaps**. But beware of defragmentation inside interned string heaps: if strings are allocated and
+deallocated often we might still encounter it inside these heaps.
+
+Instead of modyfying our simple implementation I will direct reader right into 
+[Emergence](https://github.com/KonstantinTomashevich/Emergence) implementation of interned strings called 
+`UniqueString` -- there are 
+[header](https://github.com/KonstantinTomashevich/Emergence/blob/daf48ca/Service/Memory/Implementation/Original/Memory/Original/UniqueString.hpp) 
+and [object](https://github.com/KonstantinTomashevich/Emergence/blob/daf48ca/Service/Memory/Implementation/Original/Memory/Original/UniqueString.cpp) 
+files. `UniqueString`s are never deallocated and therefore use **a pool of stacks** approach.
+
+Hope you've enjoyed reading! :)
