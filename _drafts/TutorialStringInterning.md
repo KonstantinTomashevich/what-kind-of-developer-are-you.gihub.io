@@ -14,10 +14,10 @@ Fortunately, string interning comes to the rescue!
 Let's start from describing two most common cases where string interning helps us a lot.
 
 Strings are much more informative for humans than numbers. It is easy to understand what we're dealing with when
-we're seeing `unitType = "Knight"`, but it is much harder if we're seeing `unitType = 42`. Therefore strings are
+we're seeing `unitType = "Knight"`, but it is much harder if we're seeing `unitType = 42`. Therefore string is
 the best variant when we need to refer to a well-known object like config entry. But it also means that such
 string will be copied lots of times! What if every unit has `std::string unitType` and there is 100 units? We
-would waste `99 * X` bytes where `X` is average config entry id length. And what if there is more units?
+would waste `99 * X` bytes where `X` is the average config entry id length. And what if there is more units?
 Not looking good, eh?
 
 Checking string equality is much less appealing than checking number equality -- it's `O(string length)` instead
@@ -25,11 +25,11 @@ of `O(1)` after all. The same applies to string hashing -- it is also `O(string 
 string equality or hashing strings a lot, we might end up with a bottleneck: string iteration would consume 
 much more time than actual algorithm. But there should be a way to avoid this problem, right?
 
-Now it is time to unravel the mystery of string interning: all interned strings are immutable and are stored in a 
-special storage that contains not more than 1 instance of string. So interned strings are never duplicated and 
-therefore don't waste memory! But that's not all: if string is never duplicated we're free to use pointer comparison 
-instead of string comparison and by that comparing strings in `O(1)`. The same goes for hashing: why not just use 
-unique string pointer as hash?
+Now it is the time to unravel the mystery of string interning: all interned strings are immutable and are stored in a 
+special storage that contains not more than 1 instance of a string. So interned strings are never duplicated and 
+therefore don't waste memory! But that's not all: if string is never duplicated then we're free to use pointer 
+equality check instead of string equality check and by that we can check if strings are equal in `O(1)`. 
+The same goes for hashing: why not just use unique string pointer as hash?
 
 ### Simple implementation
 
@@ -57,10 +57,10 @@ public:
     // Dereference operator will return pointer to actual string.
     const char *operator* () const noexcept;
 
-    // Interned string hashing that is computed in O(1).
+    // Interned string hash that is computed in O(1).
     [[nodiscard]] uintptr_t Hash () const noexcept;
 
-    // Interned string comparison that is computed in O(1).
+    // Interned string equality check that is done in O(1).
     bool operator== (const InternedString &_other) const;
 
     bool operator!= (const InternedString &_other) const;
@@ -158,7 +158,7 @@ bool InternedString::operator!= (const InternedString &_other) const
 {: file='InternedString.cpp'}
 
 And that's everything we need to do in order to implement string interning in a simple manner! 
-You can already test if it works correctly:
+You can already test whether it works correctly:
 
 ```c++
 InternedString first {"Hello, world!"};
@@ -196,32 +196,32 @@ Is it a real problem? Generally speaking, it is, but lots of implementations sti
 several reasons:
 
 - Usually interned strings are well-known values like constants or some ids. In this case they are either always used
-  anyway or quickly become used again after short period of being unused.
+  anyway or quickly become used again after short period of being unused. So there is no sense to deallocate them.
 - Interned strings are usually quite small, therefore reference counters might significantly increase memory usage.
 - Reference counting makes copy constructor, move constructor and assignments non-trivial: we can not just copy
-  pointer like we're doing without it. Performance impact is small, but working with non-trivial types is more difficult
-  from the architectural point of view.
+  pointer like we're doing in no-deallocation solution. Performance impact is small, but working with non-trivial 
+  types is more difficult from the architectural point of view.
 - If strings are ever deallocated, it's not possible to use addresses as stable hashes anymore! If some generic
   structure stores hashes without values, interned string might become unused and will be deallocated, leaving
-  its address and therefore its hash value free to grab for new interned strings, which would invalidate 
+  its address and therefore its hash value free to grab for new interned string, which would invalidate 
   affected hash structure.
   
-Due to this reasons [Emergence](https://github.com/KonstantinTomashevich/Emergence) implementation of this concept
+Due to these reasons [Emergence](https://github.com/KonstantinTomashevich/Emergence) implementation of this concept
 never deallocates unused interned strings. [Press Fire Games internal engine](https://www.pressfire.com/technologies)
 also never deallocates unused interned strings. But Java uses garbage collector to deallocate interned strings. 
 So it is up to you to decide whether you need to do something about unused interned strings or not.
 
 ### Fighting defragmentation
 
-Strings are small objects with vide variety of different sizes. When we're allocating strings through global heap
-allocator, for example `new` or `malloc`, at random moments, we're creating perfect ground for memory defragmentation.
+Strings are small objects with wide variety of different sizes. When we're allocating strings through global heap
+allocator like `new` or `malloc` at random moments, we're creating perfect ground for memory defragmentation.
 Of course, it's possible to solve this problem too!
 
 The core idea is to preallocate big memory blocks where interned strings will be stored and then use custom
 allocator to allocate strings inside these blocks. If there is not enough memory for interning new string,
 additional memory block will be allocated. If we're not deallocating unused interned strings, stack allocator is
-both the simpliest and the most efficient custom allocator for this purpose: each block has its own stack allocator
-that pushes new strings into itself. In this case we can call the whole structure for managing memory for intented
+both the simplest and the most efficient custom allocator for this purpose: each block has its own stack allocator
+that pushes new strings into itself. In this case we can call the whole structure for managing memory for interned
 strings **a pool of stacks**: we're using pool-based allocator to allocate new stack allocators that will allocate
 space for interned strings. It might sound monstrous, but it is actually quite easy to implement and use.
 
