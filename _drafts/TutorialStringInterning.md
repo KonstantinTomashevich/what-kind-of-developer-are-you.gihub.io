@@ -31,8 +31,187 @@ therefore don't waste memory! But that's not all: if string is never duplicated 
 instead of string comparison and by that comparing strings in `O(1)`. The same goes for hashing: why not just use 
 unique string pointer as hash?
 
-### Simplistic implementation
+### Simple implementation
 
-### About unused interned strings
+To get better understanding of string interning concept we will start from simple implementation:
+- We will ignore string encoding and just use `char`s.
+- We will ignore anti-defragmenetation tecnique.
+- We will ignore unused string deallocation.
+- We will ignore multithreaded access.
 
-### Improoving implementation
+Now let's examine our interned string class:
+```c++
+// InternedString class instances share immutable string
+// that is allocated inside string pool.
+class InternedString final
+{
+public:
+    InternedString () = default;
+
+    // Let's accept both c-style strings and modern string views
+    // as constructor arguments.
+    explicit InternedString (const char *_string) noexcept;
+
+    explicit InternedString (const std::string_view &_string) noexcept;
+
+    // Dereference operator will return pointer to actual string.
+    const char *operator* () const noexcept;
+
+    // Interned string hashing that is computed in O(1).
+    [[nodiscard]] uintptr_t Hash () const noexcept;
+
+    // Interned string comparison that is computed in O(1).
+    bool operator== (const InternedString &_other) const;
+
+    bool operator!= (const InternedString &_other) const;
+
+private:
+    // Pointer to location of actual string in memory that
+    // might be shared between many InternedString instances.
+    const char *value = nullptr;
+};
+```
+{: file='InternedString.hpp'}
+
+`InternedString` interface is quite simple and straighforward, isn't it? Let's switch to implementation:
+
+```c++
+#include <cassert>
+#include <cstring>
+#include <unordered_set>
+
+#include "InternedString.hpp"
+
+// Registrar function is the most important part in any string
+// interning implementation. This function checks whether given
+// value is already interned and interns it if it's not.
+//
+// There are 2 common questions that are answered by registrar function:
+// - How value lookup is implemented?
+// - How interned values are allocated?
+//
+// Answers to these questions describe strengths and weaknesses of
+// registrar function.
+static const char *RegisterValue (const std::string_view &_value)
+{
+    // There is no sense to allocate space for empty strings.
+    if (_value.empty ())
+    {
+        return nullptr;
+    }
+
+    // In this simple implementation we use unordered set to
+    // store views of all interned values. It is a trivial
+    // solution, but it is quite common nevertheless.
+    static std::unordered_set<std::string_view> stringRegister;
+
+    // Lets check whether value is already interned.
+    auto iterator = stringRegister.find (_value);
+
+    if (iterator == stringRegister.end ())
+    {
+        // Value is not interned: allocate memory and insert it.
+        char *space = new char[_value.size() + 1u]; // We need to add 1 byte for null-terminator.
+        strcpy (space, _value.data ());
+        auto [insertionIterator, result] = stringRegister.emplace (space);
+        assert (result);
+        return insertionIterator->data ();
+    }
+
+    // Value is already interned: we can just return pointer to it.
+    return iterator->data ();
+}
+
+// In constructors, we're getting pointers to interned values (and interning this value if needed).
+InternedString::InternedString (const char *_string) noexcept : InternedString (std::string_view {_string})
+{
+}
+
+InternedString::InternedString (const std::string_view &_string) noexcept : value (RegisterValue (_string))
+{
+}
+
+const char *InternedString::operator* () const noexcept
+{
+    return value;
+}
+
+uintptr_t InternedString::Hash () const noexcept
+{
+    // We can use pointer as hash result,
+    // because interned strings are never duplicated in memory.
+    return reinterpret_cast<uintptr_t> (value);
+}
+
+bool InternedString::operator== (const InternedString &_other) const
+{
+    // We can compare pointers directly,
+    // because interned strings are never duplicated in memory.
+    return value == _other.value;
+}
+
+bool InternedString::operator!= (const InternedString &_other) const
+{
+    return !(*this == _other);
+}
+```
+{: file='InternedString.cpp'}
+
+And that's everything we need to do in order to implement string interning in a simple manner! 
+You can already test if it works correctly:
+
+```c++
+InternedString first {"Hello, world!"};
+InternedString second {"Welcome-welcome!"};
+InternedString third {"Hello, world!"};
+
+std::cout << "first  = " << *first << std::endl;
+std::cout << "second = " << *second << std::endl;
+std::cout << "third  = " << *third << std::endl << std::endl;
+
+std::cout << "first  == second: " << (first == second ? "true" : "false") << std::endl;
+std::cout << "second == third : " << (second == third ? "true" : "false") << std::endl;
+std::cout << "first  == third : " << (first == third ? "true" : "false") << std::endl;
+```
+
+Expected output:
+
+```
+first  = Hello, world!
+second = Welcome-welcome!
+third  = Hello, world!
+
+first  == second: false
+second == third : false
+first  == third : true
+```
+
+Of course, this implementation is trivial and ignores some important concepts like unused string 
+deallocation and string-related memory defragmentation. We will explore these 2 topics below.
+
+### Destiny of unused interned strings
+
+In our trivial implementation interned strings are never truly deallocated: they persist for whole program execution.
+Is it a real problem? Generally speaking, it is, but lots of implementations stick to no-deallocation solution for
+several reasons:
+
+- Usually interned strings are well-known values like constants or some ids. In this case they are either always used
+  anyway or quickly become used again after short period of being unused.
+- Interned strings are usually quite small, therefore reference counters might significantly increase memory usage.
+- Reference counting makes copy constructor, move constructor and assignments non-trivial: we can not just copy
+  pointer like we're doing without it. Performance impact is small, but working with non-trivial types is more difficult
+  from the architectural point of view.
+- We cannot use stack-like allocators because we're deallocating strings and we cannot use fixed-size pool allocators
+  because strings have different sizes. This makes battle versus memory defragmentation much more complex.
+  
+Due to this reasons [Emergence](https://github.com/KonstantinTomashevich/Emergence) implementation of this concept
+never deallocates unused interned strings. [Press Fire Games internal engine](https://www.pressfire.com/technologies)
+also never deallocates unused interned strings. But Java uses garbage collector to deallocate interned strings. 
+So it is up to you to decide whether you need to do something about unused interned strings or not.
+
+### Fighting defragmentation
+
+Strings are small objects with vide variety of different sizes. When we're allocating strings through global heap
+allocator (`new` or `malloc`) at random moments, we're creating perfect ground for memory defragmentation.
+
+...
