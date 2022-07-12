@@ -1,6 +1,7 @@
 ---
 layout: post
 title: 'Tutorial: String interning'
+date: 2022-07-12 21:30:00 GMT+3
 categories: [Tutorials, Memory]
 tags: [Tutorials, C++]
 ---
