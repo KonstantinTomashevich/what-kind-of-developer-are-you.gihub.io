@@ -143,9 +143,9 @@ struct MyComponent final
 };
 ```
 
-Duplicating field names like this might still look a bit clumsy, but this approach is not only defining how we are
-storing results of registration process, but also provides universal form of access to them making registration 
-very easy:
+`Reflection` structure defines how we store reflection data. We still need to duplicate field names: 
+it's far from ideal, but I wasn't able to come up with any solution that avoids it entirely. The best thing about this 
+method of storing reflection data is that it universal form of access to this data making registration very easy:
 
 ```c++
 const MyComponent::Reflection &MyComponent::Reflect () noexcept
@@ -207,6 +207,59 @@ const ArrayComponent::Reflection &ArrayComponent::Reflect () noexcept
 ```
 
 ### Field projection
+
+Imagine that we have structure that contains other structures as fields:
+
+```c++
+struct Inner final
+{
+    float x = 0.0f;
+    float y = 0.0f;
+
+    // ... Reflection ...
+};
+
+struct Complex final
+{
+    Inner a;
+    Inner b;
+    Inner c;
+
+    // ... Reflection ...
+};
+```
+
+Accessing field `x` of `Inner` by `FieldId` in O(1) looks trivial: we can just store fields in vector. The same goes
+for field `b` of `Complex`. But what about field `x` of field `c` of `Complex`? We still want to access it in O(1),
+but there is no trivial way to do it.
+
+Technique to solve this issue is called field projection: if `x` is field of `a` and `a` is field of `n`, then
+`a.x` is a field of `n` too. Therefore, after projection our `Complex` structure has whole bunch of fields:
+`a`, `a.x`, `a.y`, `b`, `b.x`, `b.y`, `c`, `c.x` and `c.y`. In order to make this technique mathematically complete
+we also need to define projection function: `FieldId Project (FieldId rootObjectField, FieldId nestedObjectField)`.
+For example, `FieldId` of `a.x` is equal to `Project (Complex::Reflect ().a, Inner::Reflect ().x)`. As these projected
+ids are stable we can safely cache them and pass as parameters whenever we need to. In 
+[Emergence](https://github.com/KonstantinTomashevich/Emergence) this function is
+implemented as `Emergence::StandardLayout::ProjectNestedField` and is actually just a sum of `rootObjectField` and 
+`nestedObjectField`! We are able to make it that simple because we are doing projecting right after structure
+field registration.
+
+Like any other solution, field projection technique has its pros and cons.
+
+Pros:
+- It provides O(1) access to any field of 
+  [standard layout type](https://en.cppreference.com/w/cpp/named_req/StandardLayoutType).
+- It makes algorithms that make use of linearized structure data, for example binary serialization, much easier to 
+  implement, because projection automatically makes reflection data linear.
+
+Cons:
+- It uses lots of memory because of field info duplication: only offsets and ids are changed during projection process.
+- It makes algorithms that make use of tree-like structure data, for example YAML serialization, a bit more difficult
+  to implement, because they need to skip projected fields everywhere.
+
+For [Emergence](https://github.com/KonstantinTomashevich/Emergence), O(1) access to any field was the main reason
+to stick to this technique: reflection data is used extensively by storage management logic, for example record 
+indexing, therefore reflection access speed defines how effective storage management is.
 
 ### Conditional field iteration
 
