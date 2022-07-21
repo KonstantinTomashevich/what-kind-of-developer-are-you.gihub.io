@@ -263,8 +263,125 @@ indexing, therefore reflection access speed defines how effective storage manage
 
 ### Conditional field iteration
 
+It is important to provide user with API that allows to iterate over contextually relevant fields. For example,
+let's take a look at that structure:
+
+```c++
+struct CollisionGeometry final
+{
+    CollisionGeometryType type;
+
+    union
+    {
+        Math::Vector3f boxHalfExtents;
+
+        float sphereRadius;
+
+        struct
+        {
+            float capsuleRadius;
+
+            float capsuleHalfHeight;
+        };
+    };
+
+    // ... Reflection ...
+};
+```
+
+Technically it has 5 fields, but not more than 3 fields are contextually relevant at the same time, because
+all fields except one are inside union. For example, for spheres only `type` and `sphereRadius` fields are 
+relevant. If we're using reflection to serialize object or log it somewhere, we need to skip these irrelevant fields.
+The same thing is true for inplace vectors: if vector can hold up to 6 elements, but holds only 2 right now, we should
+not iterate over garbage memory, stored in last 4 elements.
+
+At first, I though that unions and inplace vectors are different cases and should be handled in a different way, but 
+then I came up with an idea of conditional field iteration: union switch value or count of elements is just an
+argument to conditional expression that decided whether field is visible or not in the current context. And there is
+no need to waste memory by attaching condition to every field: we only need to specify intervals where conditions
+are active. Also, it makes sense to organize conditions as a stack: we are generally adding and removing them while
+registering fields.
+
+It all might sound too abstract and high level, so let's switch to actual examples. This is registration function
+for our `CollisionGeometry`:
+
+```c++
+const CollisionGeometry::Reflection &CollisionGeometry::Reflect () noexcept
+{
+    static Reflection reflection = [] ()
+    {
+        EMERGENCE_MAPPING_REGISTRATION_BEGIN (CollisionGeometry);
+        EMERGENCE_MAPPING_REGISTER_REGULAR (type);
+
+        EMERGENCE_MAPPING_UNION_VARIANT_BEGIN (type, 0u);
+        EMERGENCE_MAPPING_REGISTER_REGULAR (boxHalfExtents);
+        EMERGENCE_MAPPING_UNION_VARIANT_END ();
+
+        EMERGENCE_MAPPING_UNION_VARIANT_BEGIN (type, 1u);
+        EMERGENCE_MAPPING_REGISTER_REGULAR (sphereRadius);
+        EMERGENCE_MAPPING_UNION_VARIANT_END ();
+
+        EMERGENCE_MAPPING_UNION_VARIANT_BEGIN (type, 2u);
+        EMERGENCE_MAPPING_REGISTER_REGULAR (capsuleRadius);
+        EMERGENCE_MAPPING_REGISTER_REGULAR (capsuleHalfHeight);
+        EMERGENCE_MAPPING_UNION_VARIANT_END ();
+
+        EMERGENCE_MAPPING_REGISTRATION_END ();
+    }();
+
+    return reflection;
+}
+```
+
+As you can see, there is nothing about conditions yet: `MappingRegistration` hides them under macros for readability.
+But what is hidden under `EMERGENCE_MAPPING_UNION_VARIANT_BEGIN` and `EMERGENCE_MAPPING_UNION_VARIANT_END` macros?
+
+```c++
+#define EMERGENCE_MAPPING_UNION_VARIANT_BEGIN(_selectorField, _switchValue)                                            \
+    builder.PushVisibilityCondition (reflectionData._selectorField,                                                    \
+                                     Emergence::StandardLayout::ConditionalOperation::EQUAL, _switchValue)
+
+#define EMERGENCE_MAPPING_UNION_VARIANT_END() builder.PopVisibilityCondition ()
+```
+
+This macros are just operating with conditions through `MappingBuilder` interface. When union begins, we're pushing
+condition that says: fields below are visible only when `_selectorField` is equal to `_switchValue`. And when union
+ends we're just popping this condition out. There are also other conditional operations, for example inplace 
+vector registration makes use of `>` (see `EMERGENCE_MAPPING_REGISTER_REGULAR_VECTOR` macro):
+
+```c++
+builder.PushVisibilityCondition (_sizeField, ConditionalOperation::GREATER, index);
+```
+
+This condition says that fields below should be visible only when vector size aka `_sizeField` is greater than element
+index. Just like that: nothing less, nothing more. Simplicity of this technique makes it very versatile: it is not
+just for unions and inplace vectors, it can be used anywhere if user needs it.
+
+Of course, conditional iteration is less performance-friendly that plain iteration, therefore `Mapping` has
+two iteration options: `Begin`/`End` for non-conditional iteration and `BeginConditional`/`EndConditional` for
+conditional iteration. You can use conditional iteration just like the usual one:
+
+```c++
+for (auto iterator = _mapping.BeginConditional (_object), end = _mapping.EndConditional (); 
+     iterator != end; ++iterator)
+{
+    StandardLayout::Field field = *iterator;
+    /// ...
+}
+```
+
+There is one important thing about conditional iteration performance: you might think that it is very slow due to
+condition stack operations -- stack push/pops, memory allocation for that and so on. But it is actually not true!
+Because push/pop order is always the same, we can get rid of stack operations during conditional iteration by 
+baking this operations during type registration. I will not dive into details of this algorithm here, but keep in
+mind: conditional iteration is not as slow as you might think.
+
 ### Mapping implementation details
 
+...
+
 ### Patches
+
+...
 
 Hope you've enjoyed reading! If you have any suggestions, reach me through telegram or email.
