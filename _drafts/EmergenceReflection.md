@@ -376,12 +376,81 @@ Because push/pop order is always the same, we can get rid of stack operations du
 baking this operations during type registration. I will not dive into details of this algorithm here, but keep in
 mind: conditional iteration is not as slow as you might think.
 
-### Mapping implementation details
-
-...
-
 ### Patches
 
-...
+Sometimes it is useful to store difference between two possible states of an object. For example, it can be used
+for prefab system to apply prefab values to freshly constructed objects. 
+[Emergence](https://github.com/KonstantinTomashevich/Emergence) supports this though patches feature: at any moment
+user can create `Patch` using `PatchBuilder` and then apply this `Patch` whenever it is needed.
+
+There is two ways to create a patch. First one is to manually list all the differences like that:
+
+```c++
+PatchBuilder builder;
+builder.Begin (Player::Reflect ().mapping);
+builder.SetBit (Player::Reflect ().alive, false);
+builder.SetBit (Player::Reflect ().poisoned, true);
+Patch patch = builder.End ();
+```
+
+The second one is much simpler: it automatically creates patch from difference between two objects. For example:
+
+```c++
+Player initial;
+Player other = initial;
+other.flags = (1u << Player::ALIVE_FLAG_OFFSET) | (1u << Player::POISONED_FLAG_OFFSET);
+
+Patch patch = PatchBuilder::FromDifference (Player::Reflect ().mapping, &other, &initial);
+```
+
+For performance reasons `Patch` system has one limitation: it works only with fields that occupy 8 or less bytes of
+memory, so inplace strings and inplace blocks of memory are ignored. But not unique strings, inplace vectors and 
+nested objects! Thanks to field projection technique inplace vectors and nested objects are analyzed as sets of
+disconnected fields and therefore are freely processed by `Patch`es.
+
+After creation `Patch`es can be easily applied to any object of target type:
+
+```c++
+patch.Apply (&object);
+```
+
+Just like `Mapping`s, `Patch`es can be moved, copied and stored anywhere you need.
+
+### Implementation details
+
+[Emergence](https://github.com/KonstantinTomashevich/Emergence) reflection system was implemented with memory usage
+and cache coherency in mind. All internal data is stored as close to each other as possible:
+
+- `Mapping` with fields is one continuous block of memory: it is reallocated during creation process to ensure that
+  it uses just enough memory to store all the fields and not more. This allows field iteration to be as cache coherent
+  as possible and also makes simultaneous access to multiple fields cache coherent too.
+- Field visibility conditions are stored in special pool in order not to interfere with field data. In the meantime,
+  pool makes sure that conditions are laid down continuously unless page ends. Therefore condition access during 
+  conditional allocation is also cache coherent.
+- Like `Mapping`, `Patch` is also represented by one continuous block of memory, that is reallocated during creation 
+  process. It makes patch application process as cache coherent as possible.
+
+Also, both `Mapping` and `Patch` are actually managed as resource handles, therefore copying a `Mapping` or a `Patch`
+does not result in actual data duplication: it only increases resource reference count.
+
+### Reflection usage
+
+[StandardLayoutMapping service](https://github.com/KonstantinTomashevich/Emergence/tree/a275a21/Service/StandardLayoutMapping) 
+is a backbone of [Emergence](https://github.com/KonstantinTomashevich/Emergence) and used almost everywhere. There is
+a quick summary of what it is used for:
+
+- It powers the [RecordCollection service](https://github.com/KonstantinTomashevich/Emergence/tree/a275a21/Service/RecordCollection)
+  by allowing it to use any record field for any index that needs it. Reflection also provides constructors and 
+  destructors for records.
+- It powers the [Warehouse service](https://github.com/KonstantinTomashevich/Emergence/tree/a275a21/Service/Warehouse)
+  by providing enough information for prepared query and object storages creation.
+- It provides [Celerity library](https://github.com/KonstantinTomashevich/Emergence/tree/a275a21/Library/Public/Celerity)
+  with information for query preparation, event management and pipeline validation.
+- Patches are the backbone of [Celerity::Assembly library](https://github.com/KonstantinTomashevich/Emergence/tree/a275a21/Library/Public/Celerity/Extension/Assembly): 
+  they are used to initialize freshly created objects with required data.
+
+To summarize, [StandardLayoutMapping service](https://github.com/KonstantinTomashevich/Emergence/tree/a275a21/Service/StandardLayoutMapping)
+is a very important part of [Emergence](https://github.com/KonstantinTomashevich/Emergence) project that powers lots
+of other high level libraries. It was specially designed and optimized for optimal usage inside these libraries.
 
 Hope you've enjoyed reading! If you have any suggestions, reach me through telegram or email.
