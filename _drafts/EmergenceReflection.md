@@ -25,9 +25,9 @@ observing field values, changing them or iterating through the whole data struct
 - Indices observe specified fields and process their values changes.
 - [Celerity](https://github.com/KonstantinTomashevich/Emergence/tree/a275a21/Library/Public/Celerity) events use 
   reflection to extract and copy useful data from objects.
-- Serialization library, which is not written yet, uses reflection to iterate over data structure to serialize or 
+- Serialization library, which is not finished yet, uses reflection to iterate over data structure to serialize or 
   deserialize it.
-- Reflection is used as a high-level parameter for generic tasks like
+- Reflection is used as a high-level parameter for generic pipeline tasks like
   [Celerity::Assembly](https://github.com/KonstantinTomashevich/Emergence/tree/a275a21/Library/Public/Celerity/Extension/Assembly) 
   extension.
 
@@ -35,7 +35,7 @@ After examination of these use cases I've decided that:
 
 - There is no need to reflect methods: reflecting fields, no-argument constructor and destructor is enough.
 - We can focus on [standard layout types](https://en.cppreference.com/w/cpp/named_req/StandardLayoutType) 
-  and ignore other types as in the most cases data is stored in such types.
+  and ignore other types because in the most cases data is stored in such types.
 - Reflection must provide API for O(1) field access: no search, no nested hierarchy traversing.
 - Reflection headers must be lightweight and template-free for optimal compile time.
 - Reflection must be aware of unions and inplace vectors: otherwise iteration would show irrelevant fields.
@@ -46,8 +46,8 @@ was born.
 
 ### Features overview
 
-Before diving into details it is good to inform the reader what our reflection can and cannot achieve. Let's start
-from the features:
+Before diving into details it is good to inform the reader what my reflection system can and cannot achieve. 
+Let's start from the features:
 
 - Lightweight field-only reflection for [standard layout types](https://en.cppreference.com/w/cpp/named_req/StandardLayoutType).
 - Field identifiers and handles provide O(1) access to field info.
@@ -85,7 +85,7 @@ to prevent such problems from appearing.
 Let's explore how type registration works in [Emergence](https://github.com/KonstantinTomashevich/Emergence).
 
 Actually, there is two registration APIs: verbose core API that is represented by `MappingBuilder` class and
-more user-friendly macro-based approach from `MappingRegistration` header. The first one is basic API that 
+more user-friendly macro-based approach from `MappingRegistration` header. The first one is a basic API that 
 allows user to register types whatever way user wants. The second one is built on top of the first one and
 represents the approach [Emergence](https://github.com/KonstantinTomashevich/Emergence) uses to register types.
 Choice to have both the verbose basic approach and the simplified macro approach was made in order to achieve
@@ -138,14 +138,14 @@ struct MyComponent final
         Mapping mapping;
     };
     
-    // Static method for getting static reflection info.
+    // Static method for getting reflection info.
     static const Reflection &Reflect () noexcept;
 };
 ```
 
-`Reflection` structure defines how we store reflection data. We still need to duplicate field names: 
-it's far from ideal, but I wasn't able to come up with any solution that avoids it entirely. The best thing about this 
-method of storing reflection data is that it universal form of access to this data making registration very easy:
+`Reflection` structure defines how we store reflection data. We still need to duplicate field names: it's far from 
+ideal, but I wasn't able to come up with any solution that avoids it entirely. The best thing about this technique of 
+storing reflection data is that it provides universal form of access to this data making registration very easy:
 
 ```c++
 const MyComponent::Reflection &MyComponent::Reflect () noexcept
@@ -163,10 +163,10 @@ const MyComponent::Reflection &MyComponent::Reflect () noexcept
 }
 ```
 
-As you can see, everything about registered fields is deduces automatically and we're not duplicating anything now!
+As you can see, everything about registered fields is deduced automatically and we're not duplicating anything now!
 It's neat, isn't it?
 
-You can also notice that macro is called `EMERGENCE_MAPPING_REGISTER_REGULAR`, instead of just 
+You can also notice that macro is named `EMERGENCE_MAPPING_REGISTER_REGULAR` instead of just 
 `EMERGENCE_MAPPING_REGISTER`. It is called like that because we have two "irregular" field archetypes: inplace
 strings and plain blocks of memory. Right now we can not safely deduce whether given field is inplace string or
 plain block, therefore we're registering them though separate macros: `EMERGENCE_MAPPING_REGISTER_BLOCK` and
@@ -234,7 +234,7 @@ for field `b` of `Complex`. But what about field `x` of field `c` of `Complex`? 
 but there is no trivial way to do it.
 
 Technique to solve this issue is called field projection: if `x` is field of `a` and `a` is field of `n`, then
-`a.x` is a field of `n` too. Therefore, after projection our `Complex` structure has whole bunch of fields:
+`a.x` is a field of `n` too. Therefore, our `Complex` structure has whole bunch of fields after projection:
 `a`, `a.x`, `a.y`, `b`, `b.x`, `b.y`, `c`, `c.x` and `c.y`. In order to make this technique mathematically complete
 we also need to define projection function: `FieldId Project (FieldId rootObjectField, FieldId nestedObjectField)`.
 For example, `FieldId` of `a.x` is equal to `Project (Complex::Reflect ().a, Inner::Reflect ().x)`. As these projected
@@ -253,7 +253,8 @@ Pros:
   implement, because projection automatically makes reflection data linear.
 
 Cons:
-- It uses lots of memory because of field info duplication: only offsets and ids are changed during projection process.
+- It uses lots of memory because of field info duplication: only offsets and ids are changed during projection process,
+  but we need to duplicate whole infos.
 - It makes algorithms that make use of tree-like structure data, for example YAML serialization, a bit more difficult
   to implement, because they need to skip projected fields everywhere.
 
@@ -270,17 +271,13 @@ let's take a look at that structure:
 struct CollisionGeometry final
 {
     CollisionGeometryType type;
-
     union
     {
         Math::Vector3f boxHalfExtents;
-
         float sphereRadius;
-
         struct
         {
             float capsuleRadius;
-
             float capsuleHalfHeight;
         };
     };
@@ -289,15 +286,15 @@ struct CollisionGeometry final
 };
 ```
 
-Technically it has 5 fields, but not more than 3 fields are contextually relevant at the same time, because
+Technically it has 5 fields, but not more than 3 fields are contextually relevant at the same time because
 all fields except one are inside union. For example, for spheres only `type` and `sphereRadius` fields are 
 relevant. If we're using reflection to serialize object or log it somewhere, we need to skip these irrelevant fields.
 The same thing is true for inplace vectors: if vector can hold up to 6 elements, but holds only 2 right now, we should
 not iterate over garbage memory, stored in last 4 elements.
 
 At first, I though that unions and inplace vectors are different cases and should be handled in a different way, but 
-then I came up with an idea of conditional field iteration: union switch value or count of elements is just an
-argument to conditional expression that decided whether field is visible or not in the current context. And there is
+then I came up with the idea of conditional field iteration: union switch value or count of elements is just an
+argument to conditional expression that decides whether field is visible or not in the current context. And there is
 no need to waste memory by attaching condition to every field: we only need to specify intervals where conditions
 are active. Also, it makes sense to organize conditions as a stack: we are generally adding and removing them while
 registering fields.
@@ -344,7 +341,7 @@ But what is hidden under `EMERGENCE_MAPPING_UNION_VARIANT_BEGIN` and `EMERGENCE_
 #define EMERGENCE_MAPPING_UNION_VARIANT_END() builder.PopVisibilityCondition ()
 ```
 
-This macros are just operating with conditions through `MappingBuilder` interface. When union begins, we're pushing
+These macros are just operating with conditions through `MappingBuilder` interface. When union begins, we're pushing
 condition that says: fields below are visible only when `_selectorField` is equal to `_switchValue`. And when union
 ends we're just popping this condition out. There are also other conditional operations, for example inplace 
 vector registration makes use of `>` (see `EMERGENCE_MAPPING_REGISTER_REGULAR_VECTOR` macro):
@@ -354,7 +351,7 @@ builder.PushVisibilityCondition (_sizeField, ConditionalOperation::GREATER, inde
 ```
 
 This condition says that fields below should be visible only when vector size aka `_sizeField` is greater than element
-index. Just like that: nothing less, nothing more. Simplicity of this technique makes it very versatile: it is not
+index. Just like that: nothing less, nothing more. Simplicity of this technique makes it very flexible: it is not
 just for unions and inplace vectors, it can be used anywhere if user needs it.
 
 Of course, conditional iteration is less performance-friendly that plain iteration, therefore `Mapping` has
@@ -373,14 +370,14 @@ for (auto iterator = _mapping.BeginConditional (_object), end = _mapping.EndCond
 There is one important thing about conditional iteration performance: you might think that it is very slow due to
 condition stack operations -- stack push/pops, memory allocation for that and so on. But it is actually not true!
 Because push/pop order is always the same, we can get rid of stack operations during conditional iteration by 
-baking this operations during type registration. I will not dive into details of this algorithm here, but keep in
+baking the operations during type registration. I will not dive into details of this algorithm here, but keep in
 mind: conditional iteration is not as slow as you might think.
 
 ### Patches
 
 Sometimes it is useful to store difference between two possible states of an object. For example, it can be used
 for prefab system to apply prefab values to freshly constructed objects. 
-[Emergence](https://github.com/KonstantinTomashevich/Emergence) supports this though patches feature: at any moment
+[Emergence](https://github.com/KonstantinTomashevich/Emergence) supports this through patches feature: at any moment
 user can create `Patch` using `PatchBuilder` and then apply this `Patch` whenever it is needed.
 
 There is two ways to create a patch. First one is to manually list all the differences like that:
@@ -424,7 +421,7 @@ and cache coherency in mind. All internal data is stored as close to each other 
 - `Mapping` with fields is one continuous block of memory: it is reallocated during creation process to ensure that
   it uses just enough memory to store all the fields and not more. This allows field iteration to be as cache coherent
   as possible and also makes simultaneous access to multiple fields cache coherent too.
-- Field visibility conditions are stored in special pool in order not to interfere with field data. In the meantime,
+- Field visibility conditions are stored in special pool in order not to interfere with the field data. In the meantime,
   pool makes sure that conditions are laid down continuously unless page ends. Therefore condition access during 
   conditional allocation is also cache coherent.
 - Like `Mapping`, `Patch` is also represented by one continuous block of memory, that is reallocated during creation 
@@ -441,7 +438,7 @@ a quick summary of what it is used for:
 
 - It powers the [RecordCollection service](https://github.com/KonstantinTomashevich/Emergence/tree/a275a21/Service/RecordCollection)
   by allowing it to use any record field for any index that needs it. Reflection also provides constructors and 
-  destructors for records.
+  destructors for the records.
 - It powers the [Warehouse service](https://github.com/KonstantinTomashevich/Emergence/tree/a275a21/Service/Warehouse)
   by providing enough information for prepared query and object storages creation.
 - It provides [Celerity library](https://github.com/KonstantinTomashevich/Emergence/tree/a275a21/Library/Public/Celerity)
@@ -453,4 +450,4 @@ To summarize, [StandardLayoutMapping service](https://github.com/KonstantinTomas
 is a very important part of [Emergence](https://github.com/KonstantinTomashevich/Emergence) project that powers lots
 of other high level libraries. It was specially designed and optimized for optimal usage inside these libraries.
 
-Hope you've enjoyed reading! If you have any suggestions, reach me through telegram or email.
+Hope you've enjoyed reading! If you have any suggestions, feel free to contact me through telegram or email.
