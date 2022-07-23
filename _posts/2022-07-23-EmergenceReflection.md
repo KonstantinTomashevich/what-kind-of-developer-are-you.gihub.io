@@ -1,6 +1,7 @@
 ---
 layout: post
 title: 'Emergence: Reflection'
+date: 2022-07-23 13:50:00 GMT+3
 categories: [Emergence, Development Log]
 tags: [Emergence, C++]
 ---
