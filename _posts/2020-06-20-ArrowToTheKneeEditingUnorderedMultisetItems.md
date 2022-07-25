@@ -97,4 +97,4 @@ But what if you don't have a record backup? Well, if you know the index count du
 there is another way to deal with this problem: storing the hash as an additional field and recalculating it only after
 the record is erased from the map. Unfortunately, I've never tried it myself, so I can't tell you more about it.
 
-Hope you've enjoyed reading about this tragic failings with `std::unordered_set`! :)
+Hope you've enjoyed reading about this tragic failings with `std::unordered_multiset`! :)
