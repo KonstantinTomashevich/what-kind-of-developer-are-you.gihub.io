@@ -86,7 +86,7 @@ without them? But I'm convinced that there are enough cases to justify that we n
 - I've seen a lot of expressions like `if (timeNow < component->coolingDownUntil) continue;`. It's not only bad for
   the performance, but also decreases readability by adding checks like this everywhere. But why not create a sorted index
   on `coolingDownUntil`? It would allow us to get the cooled down entities fast and without the iterate-over-everything
-  overhead. And because the cooldown is not really applied every frame, the index usage overhead will be really tiny.
+  overhead. And because the cool down is not really applied every frame, the index usage overhead will be really tiny.
 
 - Almost always there are some so-called managers that accompany the game world. For example, `ConfigManager` or
   `WeaponStatsManager`. Usually, these managers work as glorified hash maps, which made me think: why not put
@@ -130,7 +130,7 @@ In the end, I'd like to share some examples from my unfinished demo to show how 
 Emergence::Celerity::InsertLongTermQuery insertDynamicsMaterial;
 // ...
 
-/// Tasksk initialize queries in constructors.
+/// Task initialize queries in constructors.
 : insertDynamicsMaterial (INSERT_LONG_TERM (Emergence::Physics::DynamicsMaterial)),
 // ...
 
@@ -176,7 +176,7 @@ Emergence::Celerity::ModifyAscendingRangeQuery modifyShootersByCoolingDownUntil;
 : modifyShootersByCoolingDownUntil (MODIFY_ASCENDING_RANGE (ShooterComponent, coolingDownUntilNs)),
 /// ...
 
-// Process all the shooters where the colldown ended before this moment.
+// Process all the shooters where the cool down ended before this moment.
 // `nullptr` as query argument represents negative (if first) or positive (if second) infinity.
 for (auto shooterCursor = modifyShootersByCoolingDownUntil.Execute (nullptr, &time->fixedTimeNs);
      auto *shooter = static_cast<ShooterComponent *> (*shooterCursor);)
