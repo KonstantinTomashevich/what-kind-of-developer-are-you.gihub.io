@@ -65,11 +65,58 @@ features:
   continuous set of events that happened after this snapshot, 
 - There should be a tool for viewing memory tracks.
 
-Initially I also wanted to implement client-server profiler like [tracy](https://github.com/wolfpld/tracy), but I've
+Initially I also wanted to implement client-server profiler like [Tracy](https://github.com/wolfpld/tracy), but I've
 decided to postpone it. It is not so difficult, but it requires time and I've decided that it is better to spend this 
 time on other [Emergence](https://github.com/KonstantinTomashevich/Emergence) libraries.
 
 ### Allocators
+
+I will start from describing implemented allocators and their implementation details.
+
+#### Pool
+
+Let's start by refreshing some theory about pool allocators. These allocators can be used to acquire chunks of memory
+of predefined fixed size, for example 16-byte sized chunks. Every chunk is either used or free: used chunks contain
+user data while free chunks are organized into linked list -- every free chunk stores link to the next free chunk.
+Chunks are unified into pages that are usually quite big. Allocator manages several pages and allocates new ones if 
+needed. Pages are stored as a linked list: each page has a pointer to next one. To sum up, references look like this:
+
+![Pool allocator pages and pointers](/assets/img/EmergenceMemoryManagement/PoolAllocator.png)
+
+Pool object stores references to the first page and to the first free chunk. And that's all! Well, almost all, we also
+need to store chunk size, required chunk alignment and page capacity.
+
+[Emergence::Memory service](https://github.com/KonstantinTomashevich/Emergence/tree/e8c37b6/Service/Memory) provides
+two types of pools: OrderedPool and UnorderedPool that implement ordered and unordered pool allocation strategies.
+We'll start from listing their operations and discus difference between them later.
+
+- Construction: to construct pool you need to specify chunk size, required chunk alignment, preferred page chunk 
+  capacity and allocation group that is used for profiling (more about allocation groups later). For example:
+
+```c++
+OrderedPool records (Memory::Profiler::AllocationGroup {"Records"_us},
+                     _recordMapping.GetObjectSize (),
+                     _recordMapping.GetObjectAlignment (),
+                     /* page chunk capacity */ 128u);
+```
+
+... Pool operations ? ...
+
+Now let's discuss the difference between ordered and unordered pool allocators. Basically, ordered pool guarantees
+that page list and free chunk list are sorted by addresses in ascending order. You can see that image above
+illustrates ordered pool. This ordering provides several benefits:
+
+- Memory allocation is more cache coherent as free chunk list ordering minimizes amount of holes between used chunks.
+- Pool shrinking is much more effective: it can be done in O(pageCount + freeChunkCount) instead of 
+  O(pageCount * pageCapacity * freeChunkCount).
+- Iteration over used chunks is much more effective: we do not need to iterate over whole free list to check whether
+  chunk is free.
+
+...
+
+#### Stack
+
+#### Heap
 
 ### String interning
 
