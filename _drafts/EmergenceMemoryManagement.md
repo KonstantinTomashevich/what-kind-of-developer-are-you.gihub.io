@@ -75,44 +75,70 @@ I will start from describing implemented allocators and their implementation det
 
 #### Pool
 
-Let's start by refreshing some theory about pool allocators. These allocators can be used to acquire chunks of memory
-of predefined fixed size, for example 16-byte sized chunks. Every chunk is either used or free: used chunks contain
-user data while free chunks are organized into linked list -- every free chunk stores link to the next free chunk.
-Chunks are unified into pages that are usually quite big. Allocator manages several pages and allocates new ones if 
-needed. Pages are stored as a linked list: each page has a pointer to next one. To sum up, references look like this:
+Pool allocators manage memory in terms of chunks and pages. Chunk is a memory block of predefined size which is
+usually selected during allocator construction. Page is a large continuous block of chunks. Pages are organized into
+linked list: each page contains pointer to the next one. Chunks can either be used or unused: used chunks contain
+user-defined data and free chunks are organized into free-chunk linked list -- every free chunk contains pointer
+to the next one. To sum up, referencing looks like this:
 
 ![Pool allocator pages and pointers](/assets/img/EmergenceMemoryManagement/PoolAllocator.png)
 
-Pool object stores references to the first page and to the first free chunk. And that's all! Well, almost all, we also
-need to store chunk size, required chunk alignment and page capacity.
+When user requests new chunk from the allocator, we start by checking whether free chunk list is empty. If it's not
+empty, we can just pop the first chunk out of this list and return it to user. If there is no free chunks left, we
+need to allocate new page and put all the chunks from this page into free chunk list. 
 
-[Emergence::Memory service](https://github.com/KonstantinTomashevich/Emergence/tree/e8c37b6/Service/Memory) provides
-two types of pools: OrderedPool and UnorderedPool that implement ordered and unordered pool allocation strategies.
-We'll start from listing their operations and discus difference between them later.
-
-- Construction: to construct pool you need to specify chunk size, required chunk alignment, preferred page chunk 
-  capacity and allocation group that is used for profiling (more about allocation groups later). For example:
-
-```c++
-OrderedPool records (Memory::Profiler::AllocationGroup {"Records"_us},
-                     _recordMapping.GetObjectSize (),
-                     _recordMapping.GetObjectAlignment (),
-                     /* page chunk capacity */ 128u);
-```
-
-... Pool operations ? ...
-
-Now let's discuss the difference between ordered and unordered pool allocators. Basically, ordered pool guarantees
-that page list and free chunk list are sorted by addresses in ascending order. You can see that image above
+When user reports that he no longer uses given chunk, we can just put this chunk back into free chunks list and that's
+all! But there is one important question: are putting this chunk into the beginning of free chunk list or into other 
+place? This question defines main algorithmic difference between ordered and unordered pools. Basically, ordered pool 
+guarantees that page list and free chunk list are sorted by addresses in ascending order. You can see that image above
 illustrates ordered pool. This ordering provides several benefits:
 
 - Memory allocation is more cache coherent as free chunk list ordering minimizes amount of holes between used chunks.
-- Pool shrinking is much more effective: it can be done in O(pageCount + freeChunkCount) instead of 
-  O(pageCount * pageCapacity * freeChunkCount).
-- Iteration over used chunks is much more effective: we do not need to iterate over whole free list to check whether
-  chunk is free.
+- Pool shrinking (deallocation of fully unused pages) can be implemented effectively: it can be done in 
+  O(pageCount + freeChunkCount) instead of O(pageCount * pageCapacity * freeChunkCount), because we do not need
+  to iterate over all free chunk list to determinate whether chunk is free.
+- Iteration over used chunks can be implemented effectively for the same reason.
 
-...
+However, ordering is not a silver bullet, because it has one important flaw: it makes release operation 
+(when user informs that chunk is no longer used) O(freeChunksCount) -- we need to find suitable place for new chunk
+in the list. This can introduce significant performance drops if we're releasing lots of chunks in a random order.
+Therefore, usage of ordered or unordered pool is always a trade-off and memory usage strategy should be considered
+thoroughly before selecting one pool type over another.
+
+[Emergence::Memory service](https://github.com/KonstantinTomashevich/Emergence/tree/e8c37b6/Service/Memory) provides
+both type of pools as separate classes: `OrderedPool` and `UnorderedPool`. This allows user to select pool algorithm
+with zero runtime overhead. They both provide this set of operations:
+
+- `Acquire` requests new chunk from the pool.
+- `Release` returns chunk that is no longer used to the pool.
+- `IsEmpty` checks whether pool has any used chunk.
+- `Clear` deallocates all pages altogether.
+
+In addition, `OrderedPool` supports these operations:
+
+- Iteration over acquired (used) chunks through `BeginAcquired`/`EndAcquired`.
+- `Shrink` deallocates all pages that have no used chunks.
+
+It is worth mentioning that both pools support custom chunk alignment that can be specified during allocator creation.
+
+In the end, let's go over the pros and cons of pool allocator usage. 
+
+Pros:
+
+- Generally faster allocation and deallocation: operations on free chunk list are much more lightweight that
+  operations on complex heap allocator structures.
+- Protection from memory fragmentation: on the top level allocator works with big memory blocks (pages) instead
+  of small blocks and that reduces risk of memory fragmentation by a lot.
+- Cache coherency: chunks are allocated on continuous blocks of memory (pages), therefore in most cases logically
+  adjacent data will be stored in adjacent memory addresses.
+
+Cons:
+
+- You need to manually shrink/clear pool allocators if your memory usage strategy is not stable. For example,
+  you may allocate lots of chunks for temporary objects during level loading and you will no longer need this data
+  after level loading.
+- Pool allocators only work for fixed size chunks with size greater or equal to the size of pointer. If you need
+  variable-size cache coherent allocations or need to allocate smaller blocks of memory you need to use other approach.
 
 #### Stack
 
