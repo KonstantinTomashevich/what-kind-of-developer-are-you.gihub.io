@@ -142,8 +142,106 @@ Cons:
 
 #### Stack
 
+Stack allocators usually operate on preallocated block of memory and provide memory in a stack-like fashion by
+increasing stack top pointer. At the beginning stack top pointer looks at first byte of allocator-managed memory
+region. Each allocation is done by moving stack top pointer forward. Deallocations are done by moving this pointer
+backward. You can already see the problem in this pattern: deallocation can not be done in random order. That's true:
+there is no canonical deallocation in stack allocator API, instead there is ReturnToCheckpoint operation, that moves
+stack top pointer to saved position from the past. This operation deallocates everything that was allocated after
+checkpoint.
+
+![Stack allocator block](/assets/img/EmergenceMemoryManagement/StackAllocator.png)
+
+[Emergence::Memory service](https://github.com/KonstantinTomashevich/Emergence/tree/e8c37b6/Service/Memory) provides
+implementation of this type of allocator through `Stack` class. It preallocates memory block of given capacity and 
+operates on top of this block. `Stack` supports following operations:
+
+- `Acquire` -- allocates given amount of bytes with given alignment and moves stack top forward.
+- `Head` -- returns stack top pointer that can be saved and used as checkpoint later.
+- `Release` -- moves stack top pointer back to given checkpoint.
+- `Clear` -- moves stack top pointer back to the beginning.
+- `GetFreeSpace` -- returns how much space is left to be used.
+
+Stack allocators are simple and powerful, but also usually a niche solution. Let's go over its pros and cons.
+
+Pros:
+
+- Lighting-fast allocation: nothing can be faster than one simple pointer operation.
+- Lighting-fast mass-deallocation: we can deallocate all object in one pointer operation without needing to update
+  anything except stack top pointer.
+- Do not cause memory defragmentation: stack only preallocates memory during the construction and never actually
+  allocates memory from heap after that.
+
+Cons:
+
+- Stack allocator is only suitable for trivially-destructible objects due to its mass-deallocation approach.
+- Stack operates on fixed amount of memory and can never grow bigger that predefined capacity.
+- Stack does not support selective deallocation: you either deallocate everything by reverting to checkpoint or
+  deallocate nothing.
+
+To sum up, stack allocator is one of the best examples of niche solutions. It is almost completely unusable for
+general purpose situations, but is very helpful for some special cases. For example, it is a usual solution for
+temporary trivial objects with one-frame lifetime: during frame all systems than need such objects request memory
+for them though allocator and when frame ends these objects are easily deallocated all-at-once.
+
 #### Heap
+
+Heap allocators theme is quite interesting from technological point of view and it deserves a separate article for sure!
+But in [Emergence](https://github.com/KonstantinTomashevich/Emergence) I've decided to avoid inventing my own bicycle,
+which is quite rare as I'm almost always inventing my own bicycles, and use `malloc`, `realloc` and `free` under the
+hood of `Heap` wrapper-class. Heap allocators are universal generic solution, but there are reasons for the existence
+of other allocators, so let's go over pros and cons of this allocator type.
+
+Pros:
+
+- Universal: allocate whatever you want whenever you want.
+
+Cons:
+
+- Slower than specialized allocators, like pool and stack allocators.
+- Has high risk of memory fragmentation when lots of small objects are allocated and deallocated.
+
 
 ### String interning
 
+String interning is an important technique that allows to both save the memory and improve application performance
+if you use it right. Interned strings are stored in special pool and are never duplicated. That makes equality check,
+hash calculating and string copying lighting fast, because interned string object is essentially just a pointer
+to real string in interned strings pool. But it also slows down string creation from raw values, because it adds
+string interning pass to construction routine.
+
+[Emergence::Memory service](https://github.com/KonstantinTomashevich/Emergence/tree/e8c37b6/Service/Memory) provides
+string interning implementation for ASCII strings through `UniqueString` class. Let's take a quick look at how interned 
+strings pool is organized there.
+
+![String interning memory structure](/assets/img/EmergenceMemoryManagement/StringInterning.png)
+
+Instead of spreading strings all over the memory (which would cause memory fragmentation), we're storing them in
+special memory structure: pool of string stacks. It is essentially pool allocator of stack allocators that are used
+to allocate interned string values. When current string stack is filled we allocate new stack and continue to allocate
+string through it. Interned strings are never deallocated as it makes interning logic more performant and easy-to-use.
+To check whether string value is already interned or not we keep separate hash set of strings that hashes interned
+strings by their values instead of their pointers. It allows us to do this check in almost O(1), but, of course,
+eats additional memory.
+
+As every other memory-related solution, string interning is not a silver bullet and has its pros and cons.
+
+Pros:
+
+- Provides lighting-fast equality check, hash calculation and string copying.
+- Guarantees that strings are not duplicated in memory.
+
+Cons:
+
+- Most implementations store interned values for whole program execution, therefore temporary strings should never
+  be interned.
+- Interning is not a fast operation, so it shouldn't be called every frame and should not be called on temporary
+  strings.
+
+Implementing your own string interning library is much easier than it sounds! If you wanna try, check out 
+[my article]({% post_url 2022-07-12-TutorialStringInterning %}) about implementation of trivial string 
+interning routine.
+
 ### Profiling
+
+...
