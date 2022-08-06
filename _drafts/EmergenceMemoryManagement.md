@@ -71,8 +71,6 @@ time on other [Emergence](https://github.com/KonstantinTomashevich/Emergence) li
 
 ### Allocators
 
-I will start from describing implemented allocators and their implementation details.
-
 #### Pool
 
 Pool allocators manage memory in terms of chunks and pages. Chunk is a memory block of predefined size which is
@@ -243,5 +241,129 @@ Implementing your own string interning library is much easier than it sounds! If
 interning routine.
 
 ### Profiling
+
+It's important to understand how your memory problem scales as the project growth and good memory profiler is crucial
+to achieve this goal. Good memory profiler provides developers with tools that allow to see the big picture and to 
+identify problems early. I've decided that I need following features from 
+[Emergence](https://github.com/KonstantinTomashevich/Emergence) memory profiling:
+
+- It should be instrumental, but still reasonably fast and lightweight. Instrumental profiling would allow us to track
+  every memory operation and find even the smallest bad patterns like continuous allocation and deallocation in one
+  particular task every frame.
+- It should be able to differentiate between used and reserved memory. 
+  [Emergence](https://github.com/KonstantinTomashevich/Emergence) uses pool allocators a lot so it is very important
+  to see whether memory is used or reserved for future usage.
+- It should be able to provide memory usage flame graph at any particular moment of time. Flame graphs are quite useful,
+  because they allow to easily switch from bigger picture to details and vice versa. For example, it could be easy to 
+  see that particular component storage consumes too much memory, because it is too wide. Flame graph allows us to go
+  further into a see what actually consumes memory: component data or indices. Image below shows that indices of
+  `StaticModelComponent` consume half of the storage memory!
+
+![String interning memory structure](/assets/img/EmergenceMemoryManagement/FlameGraphExample.png)
+
+- It should provide an API for implicit hierarchy creation. For example, let's imagine we have a `Storage` library
+  and a `StorageManager` library. `Storage` knowns nothing of `StorageManager`, but it should be a child of 
+  `StorageManager` on flame graph. So, there should be a way to pass this hierarchical dependency to `Storage`
+  implicitly, without explicitly adding knowledge of `StorageManager`.
+
+I didn't find any ready-to-integrate solution that has all these features at once, therefore I decided to write
+my own memory profiling solution and integrate it with 
+[Emergence::Memory](https://github.com/KonstantinTomashevich/Emergence/tree/e8c37b6/Service/Memory) allocators.
+Also, I've chosen to separate this solution into 3 parts: profiling backend, that is directly integrated with
+[Emergence::Memory service](https://github.com/KonstantinTomashevich/Emergence/tree/e8c37b6/Service/Memory),
+runtime tracking library with serialization support and client application. I'll describe each part separately.
+
+#### Profiling backend
+
+[Emergence::MemoryProfiler service](https://github.com/KonstantinTomashevich/Emergence/tree/e8c37b6/Service/MemoryProfiler)
+is used as profiling backend: it implements memory usage calculations, registers operations and provides low-level 
+capture API. It was intentionally separated from 
+[Emergence::Memory service](https://github.com/KonstantinTomashevich/Emergence/tree/e8c37b6/Service/Memory) for
+two reasons:
+
+- We need to be able to disable memory profiling in release builds by selecting special empty implementation and that
+  should not affect memory allocators implementation selection.
+- Profiling logic is not technically coupled with allocation logic, so there is no sense to introduce coupling
+  by merging them into one service.
+
+The heart of the profiling backend is `AllocationGroup` class which provides API for memory operations registration.
+`AllocationGroup` is not only a registration API provides, but also is a part of memory usage hierarchy: groups
+are organized into tree graph with predefined `Root` group as tree root. Every `AllocationGroup` stores its id,
+reserved memory amount, used memory amount and pointers to parent, first child and next on level groups. Although 
+referencing model might look a bit weird, it allows us to avoid usage of complex containers there. Picture below 
+illustrates how `AllocationGroup` referencing looks like.
+
+![Allocation group referencing](/assets/img/EmergenceMemoryManagement/AllocationGroupReferencing.png)
+
+`AllocationGroup`s themselves are allocated through unprofiled `OrderedPool`. Of course, it is impossible to profile 
+how much memory profiling takes, because it would introduce cyclic dependency to initialization order. Usage of 
+`OrderedPool` helps us to improve performance of `AllocationGroup`s by making access to distinct groups cache
+coherent.
+
+One of the important questions that I asked myself was: how to make `AllocationGroup` construction and management as 
+convenient as possible? I've came up with two fundamental principles:
+
+- `AllocationGroup` class works as handle to real allocation group, therefore `AllocationGroup` construction does not
+  always results in construction of an actual allocation group. If allocation group with the same id already exists,
+  new `AllocationGroup` will simply reference this implementation-level allocation group. This approach allows user to
+  create `AllocationGroup` instances whenever he needs without worrying about referencing and duplicates: everything
+  is resolved on implementation level.
+- Thread-local `AllocationGroup` stacks should be used to provide implicit parent selection unless parent group is
+  selected explicitly. Stacks fit perfectly into this task: they provide intuitive interface for tasks like this.
+  Also, stack usage allows to create connection between different modules allocation groups without actually
+  adding knowledge about each other to these modules. For example:
+
+```c++
+// Storage module places its own allocation group on top before construction an object.
+auto placeholder = GetAllocationGroup ().PlaceOnTop ();
+recordMapping.Construct (record);
+
+// Object expects right group to be placed on top during construction.
+class Object final
+{
+    // ...
+    Container::Vector<StandardLayout::Patch> patches {Memory::Profiler::AllocationGroup::Top ()};
+    // ...
+};
+```
+
+Now let's get a quick look at `AllocationGroup` registration methods:
+
+- `Allocate` registers increase of reserved memory amount.
+- `Acquire` registers transfer from reserved memory into used memory.
+- `Release` registers transfer from used memory to reserved memory.
+- `Free` registers decrease of reserved memory amount.
+
+As you can see, this API is tailored for allocators than deal with memory reservation, which is the case for most
+allocations inside [Emergence](https://github.com/KonstantinTomashevich/Emergence).
+
+Now it's time to have a look at low level capture API. It consists of two major parts:
+
+- `CapturedAllocationGroup` class, that represents state of specific allocation group at the moment when capture
+  was started. User receives `CapturedAllocationGroup` of predefined root `AllocationGroup` that represents
+  captured allocation group hierarchy and can be traversed like normal allocation group hierarchy.
+
+- Event model, that consists of `Event` structure, that contains all the info about one specific memory operation,
+  and `EventObserver`, that provides API for reading new events and works as a mailbox: user can extract events
+  in historical order at any moment. One important implementation details is that all observers use shader event
+  queue which makes event management complexity independent of observer count.
+
+To start capturing memory profiling data user just needs to call `Capture::Start` method, that will capture
+all `AllocationGroup`s and create `EventObserver` for observing everything that happened after capture. To make
+event sequence easier to analyze, special marker events are also supported: user can put markers with custom ids
+using `AddMarker` method. Markers are treated like usual memory operation events. Although this API is pretty simple 
+and straightforward, it is powerful enough to be foundation for more complex and sophisticated top-level API.
+
+One significant theme, that I missed above, is how profiling backend deals with multithreading. I've though about
+trying to use some elaborate solution for this, but in the end I've decided to use one shared spin lock for all
+profiling-related operations. And it's not as clumsy as it may sound: all profiling methods are already tailored
+to be as quick and small as possible, therefore lightweight spin lock looks like a perfect fit here.
+
+#### Runtime tracking with serialization support
+
+...
+
+
+#### Client application
 
 ...
