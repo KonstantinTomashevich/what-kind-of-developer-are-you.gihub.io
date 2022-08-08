@@ -411,4 +411,32 @@ provides high-level API for working with profiling data, including state playbac
 
 #### Client application
 
-...
+I've created a client application for viewing serialized profiling tracks:
+
+![Memory recording client](/assets/img/EmergenceMemoryManagement/MemoryRecordingClient.png)
+
+- It shows memory usage flame graph with every group with user-to-total percentage.
+- Flame graph visual can be scaled and moved in any way for likes.
+- It shows timeline with markers. Markers with high frequency are shown only when timeline scale is low enough.
+- It shows list of events that are near current event, which allows user to easily jump to required event.
+- It allows user to select group on flame graph and view detailed info about this group and its children.
+
+Client application uses [ImGui](https://github.com/ocornut/imgui) and [SDL2](https://www.libsdl.org/). It is a thin
+UI layer built on top of 
+[Emergence::MemoryRecording](https://github.com/KonstantinTomashevich/Emergence/tree/e8c37b6/Library/Public/MemoryRecording),
+therefore it's not really a lot to discuss here.
+
+In future I'm planning to add automatic analyzers to client application that will track down common memory usage errors,
+that lead to performance drops. For example, underreservation, when their is not enough memory reserved for particular
+group and it always allocates new memory and them frees it, and overreservation, when too much memory is reserved for
+particular allocation group and this memory is never used to its extent.
+
+### Conclusion
+
+As I said earlier, having consistent memory model and using a right approach for memory management in project is
+very important. That's why I've spent a lot of time on designing and testing 
+[Emergence](https://github.com/KonstantinTomashevich/Emergence) memory-related libraries. I cannot say that these
+libraries are ideal as nothing is ideal in this world, but I believe that they're good enough to support this project
+and its growth.
+
+Hope you've enjoyed reading! If you have any suggestions, feel free to contact me through telegram or email.
