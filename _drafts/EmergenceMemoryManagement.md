@@ -361,8 +361,53 @@ to be as quick and small as possible, therefore lightweight spin lock looks like
 
 #### Runtime tracking with serialization support
 
-...
+Profiling backend provides API for retrieving data, but retrieving is not enough: we need a library that manages
+profiling data and provides tools to analyze and serialize this data. That's the goal of
+[Emergence::MemoryRecording library](https://github.com/KonstantinTomashevich/Emergence/tree/e8c37b6/Library/Public/MemoryRecording).
+Its API provides user with ability to:
 
+- Examine state of any allocation group at any moment of time provided this moment is a inside profiling track.
+- Read all events inside profiling in historical order.
+- Serialize and deserialize profiling tracks.
+- Capture profiling tracks at runtime.
+
+The most important part of 
+[Emergence::MemoryRecording library](https://github.com/KonstantinTomashevich/Emergence/tree/e8c37b6/Library/Public/MemoryRecording)
+is `Track` class, that stores full profiling track data and provides an API to iterate over that data and fetch
+allocation group states. That means that `Track` plays both the role of data storage and data provider. 
+
+As data storage, `Track` stores all profiling events in linked list, backed by pool allocator. For algorithmic 
+convenience initial state of captured groups is also provided as group declaration events. We need this type of events 
+to store initial data about newly found allocation group, otherwise we would need to duplicate this information in every
+operation event. So, if this additional event type is already needed, why not use if to save initial state too?
+
+As data provider, `Track` provides state of any allocation group through `RecordedAllocationGroup` class instances. 
+This class mimics `CapturedAllocationGroup`, but its instances are managed and update by owner `Track`. Time selection
+is done through movement of current event iterator using `MoveToPreviousEvent` and `MoveToNextEvent` methods. This 
+approach is more universal that direct selection of time, because it allows iteration over all events without
+worrying about how they are separated by time. Also, it allows user to user to observe state of memory after any
+operation even if two operations are separated by very small amounts of time like 1 microsecond.
+
+But how to populate `Track` with profiling data? There are two ways to do it: capture data at runtime using
+`RuntimeReporter` or load data from stream using `StreamDeserializer`. `RuntimeReporter` session is initialized
+through `Begin` method that accepts `Track` pointer and reference to captured root group, that will be converted
+into group declaration events for whole hierarchy. Then it expects user to pass events from `EventObserver` to
+`RuntimeReporter` through `ReportEvent` whenever user wants to update `Track`. Session could be ended through
+the `End` method and after that `RuntimeReporter` could be reused. `StreamDeserializer` follows the session pattern: 
+it requests track and stream pointers in `Begin` and parses events one-by-one using `TryReadNextEvent`. One-by-one
+parsing is especially important when profiling tracks are quite long: it allows to spread data loading to several
+frames and by doing so avoid freezing tool that loads this profiling track. And due to instrumental profiling tracks
+usually grow quite fast, so it is important to avoid reading everything at once.
+
+Serialization is done through `StreamSerializer`, that kind of mimics `RuntimeReporter`, but uses output stream as
+target instead of `Track` instance. Its `Begin` method accepts pointer to output stream and reference to captured
+root group. Then serialization is done using `SerializeEvent` method that takes profiling event as parameter and
+creates group declaration event for profiling track automatically if it is needed. One-by-one serialization is
+used for flexibility: user can limit how much time is spent serializing profiling data.
+
+To sum up,
+[Emergence::MemoryRecording](https://github.com/KonstantinTomashevich/Emergence/tree/e8c37b6/Library/Public/MemoryRecording)
+provides high-level API for working with profiling data, including state playback and serialization.
 
 #### Client application
 
