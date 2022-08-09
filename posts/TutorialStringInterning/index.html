@@ -1,0 +1,251 @@
+<!DOCTYPE html><html lang="en" ><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"><meta name="generator" content="Jekyll v4.2.2" /><meta property="og:title" content="Tutorial: String interning" /><meta property="og:locale" content="en" /><meta name="description" content="Is there a lot of instances of the same string in your application that are wasting lots of space? Or are you checking equality or hashing strings quite often and wondering how to do it more efficiently? Fortunately, string interning comes to the rescue!" /><meta property="og:description" content="Is there a lot of instances of the same string in your application that are wasting lots of space? Or are you checking equality or hashing strings quite often and wondering how to do it more efficiently? Fortunately, string interning comes to the rescue!" /><link rel="canonical" href="/posts/TutorialStringInterning/" /><meta property="og:url" content="/posts/TutorialStringInterning/" /><meta property="og:site_name" content="WHAT KIND OF DEV ARE YOU" /><meta property="og:type" content="article" /><meta property="article:published_time" content="2022-07-12T21:30:00+03:00" /><meta name="twitter:card" content="summary" /><meta property="twitter:title" content="Tutorial: String interning" /><meta name="twitter:site" content="@twitter_username" /> <script type="application/ld+json"> {"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2022-07-12T21:30:00+03:00","datePublished":"2022-07-12T21:30:00+03:00","description":"Is there a lot of instances of the same string in your application that are wasting lots of space? Or are you checking equality or hashing strings quite often and wondering how to do it more efficiently? Fortunately, string interning comes to the rescue!","headline":"Tutorial: String interning","mainEntityOfPage":{"@type":"WebPage","@id":"/posts/TutorialStringInterning/"},"url":"/posts/TutorialStringInterning/"}</script><title>Tutorial: String interning | WHAT KIND OF DEV ARE YOU</title><link rel="apple-touch-icon" sizes="180x180" href="/assets/img/favicons/apple-touch-icon.png"><link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicons/favicon-32x32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/img/favicons/favicon-16x16.png"><link rel="manifest" href="/assets/img/favicons/site.webmanifest"><link rel="shortcut icon" href="/assets/img/favicons/favicon.ico"><meta name="apple-mobile-web-app-title" content="WHAT KIND OF DEV ARE YOU"><meta name="application-name" content="WHAT KIND OF DEV ARE YOU"><meta name="msapplication-TileColor" content="#da532c"><meta name="msapplication-config" content="/assets/img/favicons/browserconfig.xml"><meta name="theme-color" content="#ffffff"><link rel="preconnect" href="https://fonts.googleapis.com" ><link rel="dns-prefetch" href="https://fonts.googleapis.com" ><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="dns-prefetch" href="https://fonts.gstatic.com" crossorigin><link rel="preconnect" href="https://fonts.googleapis.com" ><link rel="dns-prefetch" href="https://fonts.googleapis.com" ><link rel="preconnect" href="https://cdn.jsdelivr.net" ><link rel="dns-prefetch" href="https://cdn.jsdelivr.net" ><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato&family=Source+Sans+Pro:wght@400;600;700;900&display=swap"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4/dist/css/bootstrap.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.11.2/css/all.min.css"><link rel="stylesheet" href="/assets/css/style.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/afeld/bootstrap-toc@1.0.1/dist/bootstrap-toc.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/magnific-popup@1/dist/magnific-popup.min.css"> <script src="https://cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script> <script type="text/javascript"> class ModeToggle { static get MODE_KEY() { return "mode"; } static get MODE_ATTR() { return "data-mode"; } static get DARK_MODE() { return "dark"; } static get LIGHT_MODE() { return "light"; } static get ID() { return "mode-toggle"; } constructor() { if (this.hasMode) { if (this.isDarkMode) { if (!this.isSysDarkPrefer) { this.setDark(); } } else { if (this.isSysDarkPrefer) { this.setLight(); } } } let self = this; /* always follow the system prefers */ this.sysDarkPrefers.addEventListener("change", () => { if (self.hasMode) { if (self.isDarkMode) { if (!self.isSysDarkPrefer) { self.setDark(); } } else { if (self.isSysDarkPrefer) { self.setLight(); } } self.clearMode(); } self.notify(); }); } /* constructor() */ get sysDarkPrefers() { return window.matchMedia("(prefers-color-scheme: dark)"); } get isSysDarkPrefer() { return this.sysDarkPrefers.matches; } get isDarkMode() { return this.mode === ModeToggle.DARK_MODE; } get isLightMode() { return this.mode === ModeToggle.LIGHT_MODE; } get hasMode() { return this.mode != null; } get mode() { return sessionStorage.getItem(ModeToggle.MODE_KEY); } /* get the current mode on screen */ get modeStatus() { if (this.isDarkMode || (!this.hasMode && this.isSysDarkPrefer)) { return ModeToggle.DARK_MODE; } else { return ModeToggle.LIGHT_MODE; } } setDark() { $('html').attr(ModeToggle.MODE_ATTR, ModeToggle.DARK_MODE); sessionStorage.setItem(ModeToggle.MODE_KEY, ModeToggle.DARK_MODE); } setLight() { $('html').attr(ModeToggle.MODE_ATTR, ModeToggle.LIGHT_MODE); sessionStorage.setItem(ModeToggle.MODE_KEY, ModeToggle.LIGHT_MODE); } clearMode() { $('html').removeAttr(ModeToggle.MODE_ATTR); sessionStorage.removeItem(ModeToggle.MODE_KEY); } /* Notify another plugins that the theme mode has changed */ notify() { window.postMessage({ direction: ModeToggle.ID, message: this.modeStatus }, "*"); } } /* ModeToggle */ const toggle = new ModeToggle(); function flipMode() { if (toggle.hasMode) { if (toggle.isSysDarkPrefer) { if (toggle.isLightMode) { toggle.clearMode(); } else { toggle.setLight(); } } else { if (toggle.isDarkMode) { toggle.clearMode(); } else { toggle.setDark(); } } } else { if (toggle.isSysDarkPrefer) { toggle.setLight(); } else { toggle.setDark(); } } toggle.notify(); } /* flipMode() */ </script><body data-spy="scroll" data-target="#toc" data-topbar-visible="true"><div id="sidebar" class="d-flex flex-column align-items-end"><div class="profile-wrapper text-center"><div id="avatar"> <a href="/" class="mx-auto"> <img src="/assets/img/avatar.png" alt="avatar" onerror="this.style.display='none'"> </a></div><div class="site-title mt-3"> <a href="/">WHAT KIND OF DEV ARE YOU</a></div><div class="site-subtitle font-italic">Personal blog above Game Development and related things</div></div><ul class="w-100"><li class="nav-item"> <a href="/" class="nav-link"> <i class="fa-fw fas fa-home ml-xl-3 mr-xl-3 unloaded"></i> <span>HOME</span> </a><li class="nav-item"> <a href="/about/" class="nav-link"> <i class="fa-fw fas fa-info-circle ml-xl-3 mr-xl-3 unloaded"></i> <span>ABOUT</span> </a><li class="nav-item"> <a href="/categories/" class="nav-link"> <i class="fa-fw fas fa-stream ml-xl-3 mr-xl-3 unloaded"></i> <span>CATEGORIES</span> </a><li class="nav-item"> <a href="/tags/" class="nav-link"> <i class="fa-fw fas fa-tag ml-xl-3 mr-xl-3 unloaded"></i> <span>TAGS</span> </a><li class="nav-item"> <a href="/archives/" class="nav-link"> <i class="fa-fw fas fa-archive ml-xl-3 mr-xl-3 unloaded"></i> <span>ARCHIVES</span> </a></ul><div class="sidebar-bottom mt-auto d-flex flex-wrap justify-content-center align-items-center"> <button class="mode-toggle btn" aria-label="Switch Mode"> <i class="fas fa-adjust"></i> </button> <span class="icon-border"></span> <a href="https://github.com/KonstantinTomashevich" aria-label="github" target="_blank" rel="noopener"> <i class="fab fa-github"></i> </a> <a href="https://t.me/WhatKindOfDevAreYou" aria-label="telegram" target="_blank" rel="noopener"> <i class="fab fa-telegram"></i> </a> <a href="https://t.me/KonstantinTomashevich" aria-label="telegram" target="_blank" rel="noopener"> <i class="fab fa-telegram"></i> </a> <a href="https://www.linkedin.com/in/konstantin-tomashevich-1881aa152/" aria-label="linkedin" target="_blank" rel="noopener"> <i class="fab fa-linkedin"></i> </a> <a href="/feed.xml" aria-label="rss" > <i class="fas fa-rss"></i> </a></div></div><div id="topbar-wrapper"><div id="topbar" class="container d-flex align-items-center justify-content-between h-100 pl-3 pr-3 pl-md-4 pr-md-4"> <span id="breadcrumb"> <span> <a href="/"> Home </a> </span> <span>Tutorial: String interning</span> </span> <i id="sidebar-trigger" class="fas fa-bars fa-fw"></i><div id="topbar-title"> Post</div><i id="search-trigger" class="fas fa-search fa-fw"></i> <span id="search-wrapper" class="align-items-center"> <i class="fas fa-search fa-fw"></i> <input class="form-control" id="search-input" type="search" aria-label="search" autocomplete="off" placeholder="Search..."> </span> <span id="search-cancel" >Cancel</span></div></div><div id="main-wrapper" class="d-flex justify-content-center"><div id="main" class="container pl-xl-4 pr-xl-4"><div class="row"><div id="core-wrapper" class="col-12 col-lg-11 col-xl-9 pr-xl-4"><div class="post pl-1 pr-1 pl-md-2 pr-md-2"><h1 data-toc-skip>Tutorial: String interning</h1><div class="post-meta text-muted"> <span> Posted <em class="" data-ts="1657650600" data-df="ll" data-toggle="tooltip" data-placement="bottom"> Jul 12, 2022 </em> </span><div class="d-flex justify-content-between"> <span> By <em> <a href="https://github.com/KonstantinTomashevich">Konstantin Tomashevich</a> </em> </span><div> <span class="readtime" data-toggle="tooltip" data-placement="bottom" title="1650 words"> <em>9 min</em> read</span></div></div></div><div class="post-content"><p>Is there a lot of instances of the same string in your application that are wasting lots of space? Or are you checking equality or hashing strings quite often and wondering how to do it more efficiently? Fortunately, string interning comes to the rescue!</p><h3 id="motivation"><span class="mr-2">Motivation</span><a href="#motivation" class="anchor text-muted"><i class="fas fa-hashtag"></i></a></h3><p>Let’s start from describing two most common cases where string interning helps us a lot.</p><p>Strings are much more informative for humans than numbers. It is easy to understand what we’re dealing with when we’re seeing <code class="language-plaintext highlighter-rouge">unitType = "Knight"</code>, but it is much harder if we’re seeing <code class="language-plaintext highlighter-rouge">unitType = 42</code>. Therefore string is the best variant when we need to refer to a well-known object like config entry. But it also means that such string will be copied lots of times! What if every unit has <code class="language-plaintext highlighter-rouge">std::string unitType</code> and there is 100 units? We would waste <code class="language-plaintext highlighter-rouge">99 * X</code> bytes where <code class="language-plaintext highlighter-rouge">X</code> is the average config entry id length. And what if there is more units? Not looking good, eh?</p><p>Checking string equality is much less appealing than checking number equality – it’s <code class="language-plaintext highlighter-rouge">O(string length)</code> instead of <code class="language-plaintext highlighter-rouge">O(1)</code> after all. The same applies to string hashing – it is also <code class="language-plaintext highlighter-rouge">O(string length)</code>. So if we are checking string equality or hashing strings a lot, we might end up with a bottleneck: string iteration would consume much more time than actual algorithm. But there should be a way to avoid this problem, right?</p><p>Now it is the time to unravel the mystery of string interning: all interned strings are immutable and are stored in a special storage that contains not more than 1 instance of a string. So interned strings are never duplicated and therefore don’t waste memory! But that’s not all: if string is never duplicated then we’re free to use pointer equality check instead of string equality check and by that we can check if strings are equal in <code class="language-plaintext highlighter-rouge">O(1)</code>. The same goes for hashing: why not just use unique string pointer as hash?</p><h3 id="simple-implementation"><span class="mr-2">Simple implementation</span><a href="#simple-implementation" class="anchor text-muted"><i class="fas fa-hashtag"></i></a></h3><p>To get better understanding of string interning concept we will start from simple implementation:</p><ul><li>We will ignore string encoding and just use <code class="language-plaintext highlighter-rouge">char</code>s.<li>We will ignore anti-defragmenetation tecnique.<li>We will ignore unused string deallocation.<li>We will ignore multithreaded access.</ul><p>Now let’s examine our interned string class:</p><div file="InternedString.hpp" class="language-c++ highlighter-rouge"><div class="code-header"> <span data-label-text="InternedString.hpp"><i class="far fa-file-code"></i></span> <button aria-label="copy" data-title-succeed="Copied!"><i class="far fa-clipboard"></i></button></div><div class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+</pre><td class="rouge-code"><pre><span class="c1">// InternedString class instances share immutable string</span>
+<span class="c1">// that is allocated inside string pool.</span>
+<span class="k">class</span> <span class="nc">InternedString</span> <span class="k">final</span>
+<span class="p">{</span>
+<span class="nl">public:</span>
+    <span class="n">InternedString</span> <span class="p">()</span> <span class="o">=</span> <span class="k">default</span><span class="p">;</span>
+
+    <span class="c1">// Let's accept both c-style strings and modern string views</span>
+    <span class="c1">// as constructor arguments.</span>
+    <span class="k">explicit</span> <span class="n">InternedString</span> <span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">_string</span><span class="p">)</span> <span class="k">noexcept</span><span class="p">;</span>
+
+    <span class="k">explicit</span> <span class="n">InternedString</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string_view</span> <span class="o">&amp;</span><span class="n">_string</span><span class="p">)</span> <span class="k">noexcept</span><span class="p">;</span>
+
+    <span class="c1">// Dereference operator will return pointer to actual string.</span>
+    <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="k">operator</span><span class="o">*</span> <span class="p">()</span> <span class="k">const</span> <span class="k">noexcept</span><span class="p">;</span>
+
+    <span class="c1">// Interned string hash that is computed in O(1).</span>
+    <span class="p">[[</span><span class="n">nodiscard</span><span class="p">]]</span> <span class="kt">uintptr_t</span> <span class="n">Hash</span> <span class="p">()</span> <span class="k">const</span> <span class="k">noexcept</span><span class="p">;</span>
+
+    <span class="c1">// Interned string equality check that is done in O(1).</span>
+    <span class="kt">bool</span> <span class="k">operator</span><span class="o">==</span> <span class="p">(</span><span class="k">const</span> <span class="n">InternedString</span> <span class="o">&amp;</span><span class="n">_other</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span>
+
+    <span class="kt">bool</span> <span class="k">operator</span><span class="o">!=</span> <span class="p">(</span><span class="k">const</span> <span class="n">InternedString</span> <span class="o">&amp;</span><span class="n">_other</span><span class="p">)</span> <span class="k">const</span><span class="p">;</span>
+
+<span class="nl">private:</span>
+    <span class="c1">// Pointer to location of actual string in memory that</span>
+    <span class="c1">// might be shared between many InternedString instances.</span>
+    <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">value</span> <span class="o">=</span> <span class="nb">nullptr</span><span class="p">;</span>
+<span class="p">};</span>
+</pre></table></code></div></div><p><code class="language-plaintext highlighter-rouge">InternedString</code> interface is quite simple and straighforward, isn’t it? Let’s switch to implementation:</p><div file="InternedString.cpp" class="language-c++ highlighter-rouge"><div class="code-header"> <span data-label-text="InternedString.cpp"><i class="far fa-file-code"></i></span> <button aria-label="copy" data-title-succeed="Copied!"><i class="far fa-clipboard"></i></button></div><div class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+</pre><td class="rouge-code"><pre><span class="cp">#include</span> <span class="cpf">&lt;cassert&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;cstring&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;unordered_set&gt;</span><span class="cp">
+</span>
+<span class="cp">#include</span> <span class="cpf">"InternedString.hpp"</span><span class="cp">
+</span>
+<span class="c1">// Registrar function is the most important part in any string</span>
+<span class="c1">// interning implementation. This function checks whether given</span>
+<span class="c1">// value is already interned and interns it if it's not.</span>
+<span class="c1">//</span>
+<span class="c1">// There are 2 common questions that are answered by registrar function:</span>
+<span class="c1">// - How value lookup is implemented?</span>
+<span class="c1">// - How interned values are allocated?</span>
+<span class="c1">//</span>
+<span class="c1">// Answers to these questions describe strengths and weaknesses of</span>
+<span class="c1">// registrar function.</span>
+<span class="k">static</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="nf">RegisterValue</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string_view</span> <span class="o">&amp;</span><span class="n">_value</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// There is no sense to allocate space for empty strings.</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">_value</span><span class="p">.</span><span class="n">empty</span> <span class="p">())</span>
+    <span class="p">{</span>
+        <span class="k">return</span> <span class="nb">nullptr</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// In this simple implementation we use unordered set to</span>
+    <span class="c1">// store views of all interned values. It is a trivial</span>
+    <span class="c1">// solution, but it is quite common nevertheless.</span>
+    <span class="k">static</span> <span class="n">std</span><span class="o">::</span><span class="n">unordered_set</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string_view</span><span class="o">&gt;</span> <span class="n">stringRegister</span><span class="p">;</span>
+
+    <span class="c1">// Lets check whether value is already interned.</span>
+    <span class="k">auto</span> <span class="n">iterator</span> <span class="o">=</span> <span class="n">stringRegister</span><span class="p">.</span><span class="n">find</span> <span class="p">(</span><span class="n">_value</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">iterator</span> <span class="o">==</span> <span class="n">stringRegister</span><span class="p">.</span><span class="n">end</span> <span class="p">())</span>
+    <span class="p">{</span>
+        <span class="c1">// Value is not interned: allocate memory and insert it.</span>
+        <span class="kt">char</span> <span class="o">*</span><span class="n">space</span> <span class="o">=</span> <span class="k">new</span> <span class="kt">char</span><span class="p">[</span><span class="n">_value</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1u</span><span class="p">];</span> <span class="c1">// We need to add 1 byte for null-terminator.</span>
+        <span class="n">strcpy</span> <span class="p">(</span><span class="n">space</span><span class="p">,</span> <span class="n">_value</span><span class="p">.</span><span class="n">data</span> <span class="p">());</span>
+        <span class="k">auto</span> <span class="p">[</span><span class="n">insertionIterator</span><span class="p">,</span> <span class="n">result</span><span class="p">]</span> <span class="o">=</span> <span class="n">stringRegister</span><span class="p">.</span><span class="n">emplace</span> <span class="p">(</span><span class="n">space</span><span class="p">);</span>
+        <span class="n">assert</span> <span class="p">(</span><span class="n">result</span><span class="p">);</span>
+        <span class="k">return</span> <span class="n">insertionIterator</span><span class="o">-&gt;</span><span class="n">data</span> <span class="p">();</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Value is already interned: we can just return pointer to it.</span>
+    <span class="k">return</span> <span class="n">iterator</span><span class="o">-&gt;</span><span class="n">data</span> <span class="p">();</span>
+<span class="p">}</span>
+
+<span class="c1">// In constructors, we're getting pointers to interned values (and interning this value if needed).</span>
+<span class="n">InternedString</span><span class="o">::</span><span class="n">InternedString</span> <span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">_string</span><span class="p">)</span> <span class="k">noexcept</span> <span class="o">:</span> <span class="n">InternedString</span> <span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">string_view</span> <span class="p">{</span><span class="n">_string</span><span class="p">})</span>
+<span class="p">{</span>
+<span class="p">}</span>
+
+<span class="n">InternedString</span><span class="o">::</span><span class="n">InternedString</span> <span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string_view</span> <span class="o">&amp;</span><span class="n">_string</span><span class="p">)</span> <span class="k">noexcept</span> <span class="o">:</span> <span class="n">value</span> <span class="p">(</span><span class="n">RegisterValue</span> <span class="p">(</span><span class="n">_string</span><span class="p">))</span>
+<span class="p">{</span>
+<span class="p">}</span>
+
+<span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">InternedString</span><span class="o">::</span><span class="k">operator</span><span class="o">*</span> <span class="p">()</span> <span class="k">const</span> <span class="k">noexcept</span>
+<span class="p">{</span>
+    <span class="k">return</span> <span class="n">value</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">uintptr_t</span> <span class="n">InternedString</span><span class="o">::</span><span class="n">Hash</span> <span class="p">()</span> <span class="k">const</span> <span class="k">noexcept</span>
+<span class="p">{</span>
+    <span class="c1">// We can use pointer as hash result,</span>
+    <span class="c1">// because interned strings are never duplicated in memory.</span>
+    <span class="k">return</span> <span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="kt">uintptr_t</span><span class="o">&gt;</span> <span class="p">(</span><span class="n">value</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">bool</span> <span class="n">InternedString</span><span class="o">::</span><span class="k">operator</span><span class="o">==</span> <span class="p">(</span><span class="k">const</span> <span class="n">InternedString</span> <span class="o">&amp;</span><span class="n">_other</span><span class="p">)</span> <span class="k">const</span>
+<span class="p">{</span>
+    <span class="c1">// We can compare pointers directly,</span>
+    <span class="c1">// because interned strings are never duplicated in memory.</span>
+    <span class="k">return</span> <span class="n">value</span> <span class="o">==</span> <span class="n">_other</span><span class="p">.</span><span class="n">value</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">bool</span> <span class="n">InternedString</span><span class="o">::</span><span class="k">operator</span><span class="o">!=</span> <span class="p">(</span><span class="k">const</span> <span class="n">InternedString</span> <span class="o">&amp;</span><span class="n">_other</span><span class="p">)</span> <span class="k">const</span>
+<span class="p">{</span>
+    <span class="k">return</span> <span class="o">!</span><span class="p">(</span><span class="o">*</span><span class="k">this</span> <span class="o">==</span> <span class="n">_other</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></table></code></div></div><p>And that’s everything we need to do in order to implement string interning in a simple manner! You can already test whether it works correctly:</p><div class="language-c++ highlighter-rouge"><div class="code-header"> <span data-label-text="C++"><i class="fas fa-code small"></i></span> <button aria-label="copy" data-title-succeed="Copied!"><i class="far fa-clipboard"></i></button></div><div class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+</pre><td class="rouge-code"><pre><span class="n">InternedString</span> <span class="n">first</span> <span class="p">{</span><span class="s">"Hello, world!"</span><span class="p">};</span>
+<span class="n">InternedString</span> <span class="n">second</span> <span class="p">{</span><span class="s">"Welcome-welcome!"</span><span class="p">};</span>
+<span class="n">InternedString</span> <span class="n">third</span> <span class="p">{</span><span class="s">"Hello, world!"</span><span class="p">};</span>
+
+<span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">"first  = "</span> <span class="o">&lt;&lt;</span> <span class="o">*</span><span class="n">first</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+<span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">"second = "</span> <span class="o">&lt;&lt;</span> <span class="o">*</span><span class="n">second</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+<span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">"third  = "</span> <span class="o">&lt;&lt;</span> <span class="o">*</span><span class="n">third</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+
+<span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">"first  == second: "</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="n">first</span> <span class="o">==</span> <span class="n">second</span> <span class="o">?</span> <span class="s">"true"</span> <span class="o">:</span> <span class="s">"false"</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+<span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">"second == third : "</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="n">second</span> <span class="o">==</span> <span class="n">third</span> <span class="o">?</span> <span class="s">"true"</span> <span class="o">:</span> <span class="s">"false"</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+<span class="n">std</span><span class="o">::</span><span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">"first  == third : "</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="n">first</span> <span class="o">==</span> <span class="n">third</span> <span class="o">?</span> <span class="s">"true"</span> <span class="o">:</span> <span class="s">"false"</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+</pre></table></code></div></div><p>Expected output:</p><div class="language-plaintext highlighter-rouge"><div class="code-header"> <span data-label-text="Plaintext"><i class="fas fa-code small"></i></span> <button aria-label="copy" data-title-succeed="Copied!"><i class="far fa-clipboard"></i></button></div><div class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+</pre><td class="rouge-code"><pre>first  = Hello, world!
+second = Welcome-welcome!
+third  = Hello, world!
+
+first  == second: false
+second == third : false
+first  == third : true
+</pre></table></code></div></div><p>Of course, this implementation is trivial and ignores some important concepts like unused string deallocation and string-related memory defragmentation. We will explore these 2 topics below.</p><h3 id="destiny-of-unused-interned-strings"><span class="mr-2">Destiny of unused interned strings</span><a href="#destiny-of-unused-interned-strings" class="anchor text-muted"><i class="fas fa-hashtag"></i></a></h3><p>In our trivial implementation interned strings are never truly deallocated: they persist for whole program execution. Is it a real problem? Generally speaking, it is, but lots of implementations stick to no-deallocation solution for several reasons:</p><ul><li>Usually interned strings are well-known values like constants or some ids. In this case they are either always used anyway or quickly become used again after short period of being unused. So there is no sense to deallocate them.<li>Interned strings are usually quite small, therefore reference counters might significantly increase memory usage.<li>Reference counting makes copy constructor, move constructor and assignments non-trivial: we can not just copy pointer like we’re doing in no-deallocation solution. Performance impact is small, but working with non-trivial types is more difficult from the architectural point of view.<li>If strings are ever deallocated, it’s not possible to use addresses as stable hashes anymore! If some generic structure stores hashes without values, interned string might become unused and will be deallocated, leaving its address and therefore its hash value free to grab for new interned string, which would invalidate affected hash structure.</ul><p>Due to these reasons <a href="https://github.com/KonstantinTomashevich/Emergence">Emergence</a> implementation of this concept never deallocates unused interned strings. <a href="https://www.pressfire.com/technologies">Press Fire Games internal engine</a> also never deallocates unused interned strings. But Java uses garbage collector to deallocate interned strings. So it is up to you to decide whether you need to do something about unused interned strings or not.</p><h3 id="fighting-defragmentation"><span class="mr-2">Fighting defragmentation</span><a href="#fighting-defragmentation" class="anchor text-muted"><i class="fas fa-hashtag"></i></a></h3><p>Strings are small objects with wide variety of different sizes. When we’re allocating strings through global heap allocator like <code class="language-plaintext highlighter-rouge">new</code> or <code class="language-plaintext highlighter-rouge">malloc</code> at random moments, we’re creating perfect ground for memory defragmentation. Of course, it’s possible to solve this problem too!</p><p>The core idea is to preallocate big memory blocks where interned strings will be stored and then use custom allocator to allocate strings inside these blocks. If there is not enough memory for interning new string, additional memory block will be allocated. If we’re not deallocating unused interned strings, stack allocator is both the simplest and the most efficient custom allocator for this purpose: each block has its own stack allocator that pushes new strings into itself. In this case we can call the whole structure for managing memory for interned strings <strong>a pool of stacks</strong>: we’re using pool-based allocator to allocate new stack allocators that will allocate space for interned strings. It might sound monstrous, but it is actually quite easy to implement and use.</p><p>But what changes when we’re deallocating unused interned strings? Not a lot, actually! Sure, we cannot use stack allocators anymore, but we can use heap allocators instead. Therefore, the whole structure would become <strong>a pool of heaps</strong>. But beware of defragmentation inside interned string heaps: if strings are allocated and deallocated often we might still encounter it inside these heaps.</p><p>Instead of modyfying our simple implementation I will direct reader right into <a href="https://github.com/KonstantinTomashevich/Emergence">Emergence</a> implementation of interned strings called <code class="language-plaintext highlighter-rouge">UniqueString</code> – there are <a href="https://github.com/KonstantinTomashevich/Emergence/blob/daf48ca/Service/Memory/Implementation/Original/Memory/Original/UniqueString.hpp">header</a> and <a href="https://github.com/KonstantinTomashevich/Emergence/blob/daf48ca/Service/Memory/Implementation/Original/Memory/Original/UniqueString.cpp">object</a> files. <code class="language-plaintext highlighter-rouge">UniqueString</code>s are never deallocated and therefore use <strong>a pool of stacks</strong> approach.</p><p>Hope you’ve enjoyed reading! :)</p></div><div class="post-tail-wrapper text-muted"><div class="post-meta mb-3"> <i class="far fa-folder-open fa-fw mr-1"></i> <a href='/categories/tutorials/'>Tutorials</a>, <a href='/categories/memory/'>Memory</a></div><div class="post-tags"> <i class="fa fa-tags fa-fw mr-1"></i> <a href="/tags/tutorials/" class="post-tag no-text-decoration" >Tutorials</a> <a href="/tags/c/" class="post-tag no-text-decoration" >C++</a></div><div class="post-tail-bottom d-flex justify-content-between align-items-center mt-3 pt-5 pb-2"><div class="license-wrapper"> This post is licensed under <a href="https://creativecommons.org/licenses/by/4.0/"> CC BY 4.0 </a> by the author.</div><div class="share-wrapper"> <span class="share-label text-muted mr-1">Share</span> <span class="share-icons"> <a href="https://twitter.com/intent/tweet?text=Tutorial%3A+String+interning+-+WHAT+KIND+OF+DEV+ARE+YOU&url=%2Fposts%2FTutorialStringInterning%2F" data-toggle="tooltip" data-placement="top" title="Twitter" target="_blank" rel="noopener" aria-label="Twitter"> <i class="fa-fw fab fa-twitter"></i> </a> <a href="https://www.facebook.com/sharer/sharer.php?title=Tutorial%3A+String+interning+-+WHAT+KIND+OF+DEV+ARE+YOU&u=%2Fposts%2FTutorialStringInterning%2F" data-toggle="tooltip" data-placement="top" title="Facebook" target="_blank" rel="noopener" aria-label="Facebook"> <i class="fa-fw fab fa-facebook-square"></i> </a> <a href="https://t.me/share/url?url=%2Fposts%2FTutorialStringInterning%2F&text=Tutorial%3A+String+interning+-+WHAT+KIND+OF+DEV+ARE+YOU" data-toggle="tooltip" data-placement="top" title="Telegram" target="_blank" rel="noopener" aria-label="Telegram"> <i class="fa-fw fab fa-telegram"></i> </a> <a href="https://www.linkedin.com/sharing/share-offsite/?url=%2Fposts%2FTutorialStringInterning%2F" data-toggle="tooltip" data-placement="top" title="Linkedin" target="_blank" rel="noopener" aria-label="Linkedin"> <i class="fa-fw fab fa-linkedin"></i> </a> <i id="copy-link" class="fa-fw fas fa-link small" data-toggle="tooltip" data-placement="top" title="Copy link" data-title-succeed="Link copied successfully!"> </i> </span></div></div></div></div></div><div id="panel-wrapper" class="col-xl-3 pl-2 text-muted"><div class="access"><div id="access-lastmod" class="post"><div class="panel-heading">Recently Updated</div><ul class="post-content pl-0 pb-1 ml-1 mt-2"><li><a href="/posts/EmergenceWhyIsThereNoEntitiesInCelerity/">Emergence: Why is there no entities in Celerity?</a><li><a href="/posts/ArrowToTheKneeEditingUnorderedMultisetItems/">Arrow to the Knee: Editing unordered_multiset items</a><li><a href="/posts/EmergenceInterpolatingTransform/">Emergence: Interpolating transform</a><li><a href="/posts/EmergenceWhat&Why/">Emergence: What & Why?</a><li><a href="/posts/HintGlobalInitializationOrder/">Hint: Global Initialization Order</a></ul></div><div id="access-tags"><div class="panel-heading">Trending Tags</div><div class="d-flex flex-wrap mt-3 mb-1 mr-3"> <a class="post-tag" href="/tags/c/">C++</a> <a class="post-tag" href="/tags/emergence/">Emergence</a> <a class="post-tag" href="/tags/gamedev/">GameDev</a> <a class="post-tag" href="/tags/tutorials/">Tutorials</a> <a class="post-tag" href="/tags/ecs/">ECS</a> <a class="post-tag" href="/tags/algorithms/">Algorithms</a> <a class="post-tag" href="/tags/arrow-to-the-knee/">Arrow to the Knee</a> <a class="post-tag" href="/tags/cmake/">CMake</a> <a class="post-tag" href="/tags/containers/">Containers</a> <a class="post-tag" href="/tags/math/">Math</a></div></div></div><script src="https://cdn.jsdelivr.net/gh/afeld/bootstrap-toc@1.0.1/dist/bootstrap-toc.min.js"></script><div id="toc-wrapper" class="pl-0 pr-4 mb-5"><div class="panel-heading pl-3 pt-2 mb-2">Contents</div><nav id="toc" data-toggle="toc"></nav></div></div></div><div class="row"><div id="tail-wrapper" class="col-12 col-lg-11 col-xl-9 pl-3 pr-3 pr-xl-4"><div id="related-posts" class="mt-5 mb-2 mb-sm-4"><h3 class="pt-2 mt-1 mb-4 ml-1" data-toc-skip>Further Reading</h3><div class="card-deck mb-4"><div class="card"> <a href="/posts/TutorialLinkTimePolymorphismBasics/"><div class="card-body"> <em class="small" data-ts="1656677700" data-df="ll" > Jul 1, 2022 </em><h3 class="pt-0 mt-1 mb-3" data-toc-skip>Tutorial: Link-time polymorphism basics</h3><div class="text-muted small"><p> Everyone knows what runtime and compile time polymorphisms are, but what about link-time polymorphism? There is much less materials about this type of polymorphism and it seems almost forgotten. So...</p></div></div></a></div><div class="card"> <a href="/posts/ProblemSolvingValidatingECSGraph/"><div class="card-body"> <em class="small" data-ts="1657109700" data-df="ll" > Jul 6, 2022 </em><h3 class="pt-0 mt-1 mb-3" data-toc-skip>Problem solving: Validating ECS graph</h3><div class="text-muted small"><p> Designing algorithms is quite rare task, so it is always feels great when you can apply this skill to solve some practical problem. In this post I’ll talk about ECS graph validation algorithm that ...</p></div></div></a></div><div class="card"> <a href="/posts/EmergenceWhat&Why/"><div class="card-body"> <em class="small" data-ts="1655560800" data-df="ll" > Jun 18, 2022 </em><h3 class="pt-0 mt-1 mb-3" data-toc-skip>Emergence: What & Why?</h3><div class="text-muted small"><p> I’ve been developing Emergence project for more than a year. Or two years, if you count a previous unfortunate attempt! I’ve decided to finally come out of the shadow and start writing about it. To...</p></div></div></a></div></div></div><div class="post-navigation d-flex justify-content-between"> <a href="/posts/ProblemSolvingValidatingECSGraph/" class="btn btn-outline-primary" prompt="Older"><p>Problem solving: Validating ECS graph</p></a> <a href="/posts/EmergenceReflection/" class="btn btn-outline-primary" prompt="Newer"><p>Emergence: Reflection</p></a></div><script type="text/javascript"> $(function () { const origin = "https://giscus.app"; const iframe = "iframe.giscus-frame"; const lightTheme = "light"; const darkTheme = "dark_dimmed"; let initTheme = lightTheme; if ($("html[data-mode=dark]").length > 0 || ($("html[data-mode]").length == 0 && window.matchMedia("(prefers-color-scheme: dark)").matches)) { initTheme = darkTheme; } let giscusAttributes = { "src": "https://giscus.app/client.js", "data-repo": "WhatKindOfDevAreYou/WhatKindOfDevAreYou.github.io", "data-repo-id": "R_kgDOHhaiVA", "data-category": "GitHub Pages Comments", "data-category-id": "DIC_kwDOHhaiVM4CPv5_", "data-mapping": "pathname", "data-reactions-enabled": "1", "data-emit-metadata": "0", "data-theme": initTheme, "data-input-position": "bottom", "data-lang": "en", "crossorigin": "anonymous", "async": "" }; let giscusScript = document.createElement("script"); Object.entries(giscusAttributes).forEach(([key, value]) => giscusScript.setAttribute(key, value)); document.getElementById("tail-wrapper").appendChild(giscusScript); addEventListener("message", (event) => { if (event.source === window && event.data && event.data.direction === ModeToggle.ID) { /* global theme mode changed */ const mode = event.data.message; const theme = (mode === ModeToggle.DARK_MODE ? darkTheme : lightTheme); const message = { setConfig: { theme: theme } }; const giscus = document.querySelector(iframe).contentWindow; giscus.postMessage({ giscus: message }, origin); } }); }); </script></div></div><footer class="row pl-3 pr-3"><div class="col-12 d-flex justify-content-between align-items-center text-muted pl-0 pr-0"><div class="footer-left"><p class="mb-0"> © 2022 <a href="https://github.com/KonstantinTomashevich">Konstantin Tomashevich</a>. <span data-toggle="tooltip" data-placement="top" title="Except where otherwise noted, the blog posts on this site are licensed under the Creative Commons Attribution 4.0 International (CC BY 4.0) License by the author.">Some rights reserved.</span></p></div><div class="footer-right"><p class="mb-0"> Powered by <a href="https://jekyllrb.com" target="_blank" rel="noopener">Jekyll</a> with <a href="https://github.com/cotes2020/jekyll-theme-chirpy" target="_blank" rel="noopener">Chirpy</a> theme.</p></div></div></footer></div><div id="search-result-wrapper" class="d-flex justify-content-center unloaded"><div class="col-12 col-sm-11 post-content"><div id="search-hints"><div id="access-tags"><div class="panel-heading">Trending Tags</div><div class="d-flex flex-wrap mt-3 mb-1 mr-3"> <a class="post-tag" href="/tags/c/">C++</a> <a class="post-tag" href="/tags/emergence/">Emergence</a> <a class="post-tag" href="/tags/gamedev/">GameDev</a> <a class="post-tag" href="/tags/tutorials/">Tutorials</a> <a class="post-tag" href="/tags/ecs/">ECS</a> <a class="post-tag" href="/tags/algorithms/">Algorithms</a> <a class="post-tag" href="/tags/arrow-to-the-knee/">Arrow to the Knee</a> <a class="post-tag" href="/tags/cmake/">CMake</a> <a class="post-tag" href="/tags/containers/">Containers</a> <a class="post-tag" href="/tags/math/">Math</a></div></div></div><div id="search-results" class="d-flex flex-wrap justify-content-center text-muted mt-3"></div></div></div></div><div id="mask"></div><a id="back-to-top" href="#" aria-label="back-to-top" class="btn btn-lg btn-box-shadow" role="button"> <i class="fas fa-angle-up"></i> </a><div id="notification" class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-animation="true" data-autohide="false"><div class="toast-header"> <button type="button" class="ml-2 ml-auto close" data-dismiss="toast" aria-label="Close"> <span aria-hidden="true">&times;</span> </button></div><div class="toast-body text-center pt-0"><p class="pl-2 pr-2 mb-3">A new version of content is available.</p><button type="button" class="btn btn-primary" aria-label="Update"> Update </button></div></div><script src="https://cdn.jsdelivr.net/npm/simple-jekyll-search@1.10.0/dest/simple-jekyll-search.min.js"></script> <script> SimpleJekyllSearch({ searchInput: document.getElementById('search-input'), resultsContainer: document.getElementById('search-results'), json: '/assets/js/data/search.json', searchResultTemplate: '<div class="pl-1 pr-1 pl-sm-2 pr-sm-2 pl-lg-4 pr-lg-4 pl-xl-0 pr-xl-0"> <a href="{url}">{title}</a><div class="post-meta d-flex flex-column flex-sm-row text-muted mt-1 mb-1"> {categories} {tags}</div><p>{snippet}</p></div>', noResultsText: '<p class="mt-5">Oops! No results found.</p>', templateMiddleware: function(prop, value, template) { if (prop === 'categories') { if (value === '') { return `${value}`; } else { return `<div class="mr-sm-4"><i class="far fa-folder fa-fw"></i>${value}</div>`; } } if (prop === 'tags') { if (value === '') { return `${value}`; } else { return `<div><i class="fa fa-tag fa-fw"></i>${value}</div>`; } } } }); </script> <script src="https://cdn.jsdelivr.net/combine/npm/magnific-popup@1/dist/jquery.magnific-popup.min.js,npm/lozad/dist/lozad.min.js,npm/clipboard@2/dist/clipboard.min.js"></script> <script src="https://cdn.jsdelivr.net/combine/npm/dayjs@1/dayjs.min.js,npm/dayjs@1/locale/en.min.js,npm/dayjs@1/plugin/relativeTime.min.js,npm/dayjs@1/plugin/localizedFormat.min.js"></script> <script defer src="/assets/js/dist/post.min.js"></script> <script src="https://cdn.jsdelivr.net/npm/bootstrap@4/dist/js/bootstrap.bundle.min.js"></script> <script defer src="/app.js"></script>
