@@ -1,6 +1,7 @@
 ---
 layout: post
 title: 'Emergence: Memory management'
+date: 2022-08-09 09:30:00 GMT+3
 categories: [Emergence, Development Log]
 tags: [Emergence, C++]
 ---
